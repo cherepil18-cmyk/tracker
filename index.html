@@ -200,6 +200,13 @@
   .rest-btns { display: flex; gap: 8px; flex: 1; flex-wrap: wrap; }
 
   /* ---- История / прогресс ---- */
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .chip {
+    font: inherit; font-size: 13px; font-weight: 600; padding: 8px 14px;
+    border-radius: 999px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--text-2); cursor: pointer; white-space: nowrap;
+  }
+  .chip.on { background: var(--lime); border-color: var(--lime); color: #0a0a0a; }
   .hist-item {
     background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
     padding: 14px 16px; margin-bottom: 10px;
@@ -219,6 +226,12 @@
   }
   .note-area:focus { outline: none; border-color: var(--lime); }
   .note-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 2px 6px; }
+  .day-name {
+    width: 100%; font: inherit; font-weight: 800; font-size: 18px; letter-spacing: -.01em;
+    color: var(--text); background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 12px 14px; margin-bottom: 14px;
+  }
+  .day-name:focus { outline: none; border-color: var(--lime); }
 
   .saved-flash {
     position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
@@ -253,6 +266,11 @@
 
   function uid() { return "x" + Math.random().toString(36).slice(2, 9); }
   function todayISO() { return new Date().toISOString().slice(0, 10); }
+  function nowTime() { var d = new Date(); return d.getHours() + ":" + (d.getMinutes() < 10 ? "0" : "") + d.getMinutes(); }
+  function clientHistoryCount(client) {
+    if (!client) return 0;
+    return client.дни.reduce(function (n, d) { return n + (d.история ? d.история.length : 0); }, 0);
+  }
 
   function ex(название, подходы) {
     return { id: uid(), название: название, сделано: false, подходы: подходы };
@@ -485,8 +503,9 @@
 
     toolbarEl.innerHTML =
       '<button class="btn btn-primary" data-act="finish-day">✓ Завершить тренировку</button>' +
-      '<button class="btn btn-ghost" data-nav="#/client/' + esc(cid) + '/day/' + esc(did) + '/history">История' +
-        (day.история.length ? ' (' + day.история.length + ')' : '') + '</button>';
+      '<button class="btn btn-ghost" data-nav="#/client/' + esc(cid) + '/history">История' +
+        (clientHistoryCount(client) ? ' (' + clientHistoryCount(client) + ')' : '') + '</button>' +
+      '<button class="btn btn-ghost" data-act="del-day">Удалить день</button>';
 
     var people = client.люди;
 
@@ -519,10 +538,14 @@
         '<button class="btn btn-ghost" data-act="rest-stop">Стоп</button>' +
       '</div></div>';
 
-    view.innerHTML = tonHtml + repeatBtn + exHtml +
+    var dayNameHtml =
+      '<p class="note-label">Название дня</p>' +
+      '<input class="day-name" data-act="rename-day" value="' + esc(day.название) + '" placeholder="Например: День 1 — ноги">';
+
+    view.innerHTML = dayNameHtml + tonHtml + repeatBtn + exHtml +
       '<div class="addrow"><button class="btn btn-primary btn-block" data-act="add-ex">+ Упражнение</button></div>' +
       noteHtml + restHtml +
-      '<p class="hint">Всё редактируется: коснись названия, веса или повторов. «Завершить тренировку» запишет дату в историю и спишет занятие с абонемента.</p>';
+      '<p class="hint">Всё редактируется: коснись названия дня, упражнения, веса или повторов. «Завершить тренировку» запишет дату и время в историю и спишет занятие с абонемента.</p>';
   }
 
   function renderExercise(e, ei, people) {
@@ -557,27 +580,56 @@
       '</div></div>';
   }
 
-  // ================= ЭКРАН: ИСТОРИЯ =================
-  function renderHistory(cid, did) {
+  // ================= ЭКРАН: ИСТОРИЯ (общая по клиенту) =================
+  // filterDid — id дня для фильтра, или "" (все дни).
+  function renderHistory(cid, filterDid) {
     var client = findClient(cid);
-    var day = findDay(client, did);
-    if (!day) { location.hash = "#/client/" + cid; return; }
-    setHeader('<button class="back" data-nav="#/client/' + esc(cid) + '/day/' + esc(did) + '">← ' + esc(day.название) + '</button>',
-      'ИСТО<span class="hl">РИЯ</span>', day.история.length + " тренировок записано");
-    toolbarEl.innerHTML = "";
-    if (!day.история.length) {
-      view.innerHTML = '<p class="empty">Пока нет записанных тренировок.<br>Заверши тренировку на экране дня — она появится здесь с датой.</p>';
+    if (!client) { location.hash = "#/"; return; }
+    setHeader('<button class="back" data-nav="#/client/' + esc(cid) + '">← ' + esc(client.имя) + '</button>',
+      'ИСТО<span class="hl">РИЯ</span>', "");
+
+    // собираем ВСЕ записи по всем дням клиента, добавляя название дня к каждой
+    var all = [];
+    client.дни.forEach(function (d) {
+      (d.история || []).forEach(function (h) {
+        all.push({ h: h, dayName: d.название, dayId: d.id });
+      });
+    });
+    // сортировка: сначала новые (по дате, потом по времени)
+    all.sort(function (a, b) {
+      var byDate = (b.h.дата || "").localeCompare(a.h.дата || "");
+      if (byDate !== 0) return byDate;
+      return (b.h.время || "").localeCompare(a.h.время || "");
+    });
+
+    var filtered = filterDid ? all.filter(function (x) { return x.dayId === filterDid; }) : all;
+
+    // фильтр-кнопки: Все + по каждому дню
+    var chips = '<button class="chip ' + (!filterDid ? "on" : "") + '" data-nav="#/client/' + esc(cid) + '/history">Все (' + all.length + ')</button>';
+    client.дни.forEach(function (d) {
+      var cnt = (d.история || []).length;
+      chips += '<button class="chip ' + (filterDid === d.id ? "on" : "") + '" data-nav="#/client/' + esc(cid) + '/history/' + esc(d.id) + '">' + esc(d.название) + ' (' + cnt + ')</button>';
+    });
+    toolbarEl.innerHTML = '';
+    var chipsHtml = '<div class="chips">' + chips + '</div>';
+
+    if (!filtered.length) {
+      view.innerHTML = chipsHtml + '<p class="empty">Пока нет записанных тренировок.<br>Заверши тренировку на экране дня — она появится здесь с датой и временем.</p>';
       return;
     }
-    var items = day.история.slice().sort(function (a, b) { return (b.дата || "").localeCompare(a.дата || ""); });
-    view.innerHTML = items.map(function (h) {
+    var itemsHtml = filtered.map(function (x) {
+      var h = x.h;
       var dt = new Date(h.дата + "T00:00:00");
       var ds = isNaN(dt) ? h.дата : new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" }).format(dt);
+      var when = ds + (h.время ? ", " + h.время : "");
       var sub = (h.тоннаж ? Object.keys(h.тоннаж).map(function (p) { return p + ": " + h.тоннаж[p] + " кг"; }).join(" · ") : "");
-      return '<div class="hist-item"><div class="hist-date">' + esc(ds) + '</div>' +
+      return '<div class="hist-item">' +
+        '<div class="hist-date">' + esc(when) + '</div>' +
+        '<div class="hist-sub" style="color:var(--lime)">' + esc(x.dayName) + '</div>' +
         (sub ? '<div class="hist-sub">Тоннаж — ' + esc(sub) + '</div>' : '') +
         (h.заметка ? '<div class="hist-note">' + esc(h.заметка) + '</div>' : '') + '</div>';
     }).join("");
+    view.innerHTML = chipsHtml + itemsHtml;
   }
 
   // ================= ЭКРАН: ПРОГРЕСС УПРАЖНЕНИЯ =================
@@ -669,7 +721,7 @@
     });
     var ton = {};
     client.люди.forEach(function (p) { ton[p] = tonnage(day, p); });
-    day.история.push({ дата: todayISO(), заметка: day.заметка || "", снимок: снимок, тоннаж: ton });
+    day.история.push({ дата: todayISO(), время: nowTime(), заметка: day.заметка || "", снимок: снимок, тоннаж: ton });
     // списываем занятие
     var ab = client.абонемент;
     if (ab && typeof ab.осталось === "number") ab.осталось = Math.max(0, ab.осталось - 1);
@@ -764,6 +816,13 @@
       day.упражнения[ei].подходы.push(set(act === "add-warm", b)); save(); route(); return;
     }
     if (act === "del-set") { day.упражнения[ei].подходы.splice(si, 1); save(); route(); return; }
+    if (act === "del-day") {
+      if (confirm("Удалить день «" + day.название + "» со всеми упражнениями и историей этого дня?")) {
+        client.дни = client.дни.filter(function (d) { return d.id !== day.id; });
+        save(); location.hash = "#/client/" + client.id;
+      }
+      return;
+    }
   });
 
   // ---- Ввод (названия / веса / заметка) ----
@@ -778,6 +837,7 @@
     if (!day) return;
 
     if (act === "edit-note") { day.заметка = el.value; save(); return; }
+    if (act === "rename-day") { day.название = el.value; save(); return; }
     var ei = +el.dataset.ex;
     if (act === "rename-ex") { day.упражнения[ei].название = el.value; save(); return; }
     var si = +el.dataset.set, person = el.dataset.person;
@@ -829,11 +889,13 @@
     restStop();
     var h = location.hash || "#/";
     var chartM = h.match(/^#\/client\/([^/]+)\/day\/([^/]+)\/chart\/(.+)$/);
-    var histM = h.match(/^#\/client\/([^/]+)\/day\/([^/]+)\/history$/);
+    var histDayM = h.match(/^#\/client\/([^/]+)\/history\/([^/]+)$/);
+    var histM = h.match(/^#\/client\/([^/]+)\/history$/);
     var dayM = h.match(/^#\/client\/([^/]+)\/day\/([^/]+)$/);
     var cliM = h.match(/^#\/client\/([^/]+)$/);
     if (chartM) renderChart(decodeURIComponent(chartM[1]), decodeURIComponent(chartM[2]), chartM[3]);
-    else if (histM) renderHistory(decodeURIComponent(histM[1]), decodeURIComponent(histM[2]));
+    else if (histDayM) renderHistory(decodeURIComponent(histDayM[1]), decodeURIComponent(histDayM[2]));
+    else if (histM) renderHistory(decodeURIComponent(histM[1]), "");
     else if (dayM) renderDay(decodeURIComponent(dayM[1]), decodeURIComponent(dayM[2]));
     else if (cliM) renderClient(decodeURIComponent(cliM[1]));
     else renderClients();
