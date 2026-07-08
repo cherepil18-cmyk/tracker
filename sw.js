@@ -1,6 +1,6 @@
 // Service worker: кэширует приложение целиком, чтобы работало без интернета.
 // При первом заходе (с сетью) складывает файлы в кэш; дальше отдаёт из кэша.
-const CACHE = "tracker-v1";
+const CACHE = "tracker-v2";
 const ASSETS = [
   "index.html",
   "manifest.json",

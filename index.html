@@ -6,646 +6,853 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Трекер">
-<meta name="theme-color" content="#0d0d0d">
+<meta name="apple-mobile-web-app-title" content="ИЧ Трекер">
+<meta name="theme-color" content="#0a0a0a">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.png">
-<title>Трекер тренировок — Зал</title>
+<title>ИЧ · Трекер тренировок</title>
 <script>
-  // Регистрируем service worker — он кэширует приложение,
-  // чтобы оно работало без интернета после первой загрузки.
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function () {
       navigator.serviceWorker.register("sw.js").catch(function () {});
     });
   }
+  window.onerror = function (msg, src, line) {
+    try {
+      var v = document.getElementById("view");
+      if (v) v.innerHTML = '<p class="hint" style="color:#ff453a">Ошибка: ' +
+        String(msg) + ' (стр. ' + line + ')</p>';
+    } catch (e) {}
+    return false;
+  };
 </script>
 <style>
   :root {
-    --surface-1:      #fcfcfb;
-    --surface-2:      #f2f2ef;
-    --page-plane:     #f9f9f7;
-    --text-primary:   #0b0b0b;
-    --text-secondary: #52514e;
-    --text-muted:     #898781;
-    --gridline:       #e1e0d9;
-    --border:         rgba(11,11,11,0.12);
-    --accent:         #2a78d6;
-    --accent-soft:    rgba(42,120,214,0.12);
-    --good:           #0ca30c;
-    --warm:           #e08a00;
+    --bg:        #0a0a0a;
+    --surface:   #1c1c1e;
+    --surface-2: #2a2a2c;
+    --line:      #313134;
+    --text:      #ffffff;
+    --text-2:    #a1a1a6;
+    --muted:     #6e6e73;
+    --lime:      #d4f000;
+    --lime-dim:  #b7d400;
+    --amber:     #f5a623;
+    --good:      #3ddc84;
+    --crit:      #ff453a;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --surface-1:      #1a1a19;
-      --surface-2:      #242422;
-      --page-plane:     #0d0d0d;
-      --text-primary:   #ffffff;
-      --text-secondary: #c3c2b7;
-      --text-muted:     #898781;
-      --gridline:       #2c2c2a;
-      --border:         rgba(255,255,255,0.14);
-      --accent:         #3987e5;
-      --accent-soft:    rgba(57,135,229,0.18);
-      --good:           #16c916;
-      --warm:           #f5a623;
-    }
-  }
-
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); }
   body {
-    margin: 0;
-    background: var(--page-plane);
-    color: var(--text-primary);
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    font-size: 16px;
-    line-height: 1.45;
-    padding-bottom: env(safe-area-inset-bottom);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "SF Pro Display", "Segoe UI", sans-serif;
+    font-size: 16px; line-height: 1.45;
+    padding-bottom: calc(40px + env(safe-area-inset-bottom));
   }
-  .app { max-width: 720px; margin: 0 auto; padding: 0 14px 80px; }
+  .app { max-width: 720px; margin: 0 auto; padding: 0 16px 40px; }
 
-  header.top {
-    position: sticky; top: 0; z-index: 20;
-    background: var(--page-plane);
-    padding: 16px 0 12px;
-    border-bottom: 1px solid var(--gridline);
-    margin-bottom: 16px;
-    display: flex; align-items: center; gap: 10px;
+  /* ---- Шапка-герой ---- */
+  .hero { position: relative; padding: 22px 0 14px; margin-bottom: 12px; overflow: hidden; }
+  .hero::before {
+    content: ""; position: absolute; inset: -50% -30% auto -30%; height: 240px;
+    background:
+      radial-gradient(55% 100% at 18% 0%, rgba(212,240,0,.13), transparent 70%),
+      radial-gradient(50% 100% at 92% 0%, rgba(245,166,35,.11), transparent 70%);
+    pointer-events: none;
   }
-  header.top h1 { font-size: 18px; margin: 0; flex: 1; }
+  .eyebrow {
+    position: relative; font-size: 12px; font-weight: 800; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--lime); margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .eyebrow .back {
+    font: inherit; letter-spacing: .06em; background: none; border: none;
+    color: var(--text-2); cursor: pointer; padding: 0; text-transform: uppercase;
+  }
+  .eyebrow .back:active { color: var(--lime); }
+  h1.title {
+    position: relative; font-size: clamp(28px, 8.5vw, 44px); line-height: .94;
+    font-weight: 900; letter-spacing: -.02em; text-transform: uppercase;
+    text-wrap: balance; margin: 0;
+  }
+  h1.title.compact { font-size: clamp(22px, 6.5vw, 34px); }
+  h1.title .hl { color: var(--lime); }
+  .subtitle { position: relative; color: var(--text-2); font-size: 14px; margin-top: 8px; }
+
+  /* ---- Кнопки ---- */
+  .toolbar { display: flex; gap: 10px; margin: 16px 0; flex-wrap: wrap; }
   .btn {
-    font: inherit; font-size: 14px;
-    padding: 8px 14px; border-radius: 10px;
-    border: 1px solid var(--border);
-    background: var(--surface-1); color: var(--text-primary);
-    cursor: pointer;
+    font: inherit; font-weight: 700; font-size: 14px; padding: 12px 18px;
+    border-radius: 12px; border: 1px solid transparent; cursor: pointer;
+    background: var(--surface-2); color: var(--text); line-height: 1;
   }
-  .btn:active { background: var(--surface-2); }
-  .btn-accent { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .btn-ghost { background: none; border: none; color: var(--text-secondary); padding: 8px 6px; }
-  .btn-ghost:active { color: var(--accent); }
-  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn:active { filter: brightness(1.15); }
+  .btn-primary { background: var(--lime); color: #0a0a0a; }
+  .btn-ghost { background: transparent; border-color: var(--line); color: var(--text-2); }
+  .btn-block { width: 100%; text-align: center; padding: 15px; }
+  .btn:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
 
-  .crumbs { color: var(--text-muted); font-size: 13px; margin: 0 0 14px; }
-  .crumbs b { color: var(--text-secondary); font-weight: 600; }
-
-  /* Списки-плитки */
-  .tile-list { display: flex; flex-direction: column; gap: 10px; }
+  /* ---- Карточки-плитки ---- */
+  .list { display: flex; flex-direction: column; gap: 12px; }
   .tile {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
     width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer;
-    background: var(--surface-1); border: 1px solid var(--border);
-    border-radius: 12px; padding: 16px;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 18px; padding: 18px;
   }
-  .tile:active { border-color: var(--accent); }
-  .tile-title { font-weight: 600; font-size: 17px; }
-  .tile-sub { color: var(--text-muted); font-size: 13px; margin-top: 2px; }
-  .tile-chevron { color: var(--text-muted); font-size: 20px; }
-  .tile-progress { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+  .tile:active { border-color: var(--lime); }
+  .tile > span:first-child { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+  .tile-title { overflow: hidden; text-overflow: ellipsis; }
+  .tile-title { display: block; font-weight: 800; font-size: 17px; letter-spacing: -.01em; text-transform: uppercase; }
+  .tile-sub { display: block; color: var(--muted); font-size: 13px; margin-top: 3px; }
+  .tile-chevron { color: var(--muted); font-size: 22px; flex: 0 0 auto; }
+  .tile-prog { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: 0 0 auto; }
+  .prog-num { font-size: 13px; font-weight: 700; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .prog-track { width: 72px; height: 7px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+  .prog-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--lime), var(--amber)); }
 
-  /* Упражнение-карточка */
-  .exercise {
-    background: var(--surface-1); border: 1px solid var(--border);
-    border-radius: 14px; padding: 12px 14px; margin-bottom: 12px;
+  .empty { text-align: center; color: var(--muted); padding: 40px 10px; }
+  .hint { color: var(--muted); font-size: 13px; margin: 14px 2px 0; }
+
+  /* ---- Абонемент-панель ---- */
+  .abon {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    padding: 14px 16px; margin-bottom: 16px;
   }
-  .exercise.done { border-color: var(--good); }
-  .ex-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .abon-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .abon-left { font-size: 13px; color: var(--text-2); }
+  .abon-big { font-size: 22px; font-weight: 800; color: var(--lime); font-variant-numeric: tabular-nums; }
+  .abon-big.warn { color: var(--amber); }
+  .abon-big.crit { color: var(--crit); }
+  .abon-edit { font: inherit; font-size: 12px; color: var(--muted); background: none; border: none; cursor: pointer; text-decoration: underline; }
+
+  /* ---- Упражнение ---- */
+  .exercise {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 18px; padding: 14px 16px; margin-bottom: 14px;
+  }
+  .exercise.done { border-color: var(--lime); }
+  .ex-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
   .ex-check {
-    flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px;
-    border: 2px solid var(--border); background: var(--surface-2);
+    flex: 0 0 auto; width: 30px; height: 30px; border-radius: 9px;
+    border: 2px solid var(--line); background: var(--surface-2);
     display: inline-flex; align-items: center; justify-content: center;
     cursor: pointer; font-size: 16px; color: transparent; padding: 0;
   }
-  .ex-check.on { background: var(--good); border-color: var(--good); color: #fff; }
+  .ex-check.on { background: var(--lime); border-color: var(--lime); color: #0a0a0a; }
   .ex-name {
-    flex: 1; font: inherit; font-weight: 600; font-size: 16px;
-    border: none; background: none; color: var(--text-primary);
-    padding: 4px 2px; border-bottom: 1px dashed transparent; min-width: 0;
+    flex: 1; font: inherit; font-weight: 800; font-size: 16px; letter-spacing: -.01em;
+    border: none; background: none; color: var(--text); padding: 4px 2px;
+    border-bottom: 1px dashed transparent; min-width: 0;
   }
-  .ex-name:focus { outline: none; border-bottom-color: var(--accent); }
-  .ex-del { flex: 0 0 auto; color: var(--text-muted); border: none; background: none; cursor: pointer; font-size: 18px; padding: 4px 6px; }
-  .ex-del:active { color: var(--warm); }
+  .ex-name:focus { outline: none; border-bottom-color: var(--lime); }
+  .ex-btn { flex: 0 0 auto; color: var(--muted); border: none; background: none; cursor: pointer; font-size: 17px; padding: 4px 5px; }
+  .ex-btn.chart:active { color: var(--lime); }
+  .ex-btn.del:active { color: var(--crit); }
 
-  /* Таблица подходов */
+  .sets-wrap { overflow-x: auto; }
   .sets { width: 100%; border-collapse: collapse; }
   .sets th {
-    font-size: 11px; text-transform: uppercase; letter-spacing: .03em;
-    color: var(--text-muted); font-weight: 600; text-align: center; padding: 2px 4px 6px;
+    font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--muted); font-weight: 700; padding: 2px 4px 8px; text-align: center;
   }
   .sets th.lbl { text-align: left; }
-  .sets td { padding: 4px 3px; text-align: center; vertical-align: middle; }
-  .set-label { text-align: left; color: var(--text-secondary); font-size: 13px; white-space: nowrap; }
-  .set-label .warm-tag { color: var(--warm); font-weight: 600; }
-  .set-check {
-    width: 24px; height: 24px; border-radius: 7px;
-    border: 2px solid var(--border); background: var(--surface-2);
-    display: inline-flex; align-items: center; justify-content: center;
-    cursor: pointer; font-size: 14px; color: transparent; padding: 0;
+  .sets td { padding: 5px 3px; text-align: center; vertical-align: middle; }
+  .slab { text-align: left; color: var(--text-2); font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .slab .warm { color: var(--amber); }
+  .scheck {
+    width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--line);
+    background: var(--surface-2); display: inline-flex; align-items: center;
+    justify-content: center; font-size: 14px; color: transparent; cursor: pointer; padding: 0;
   }
-  .set-check.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .scheck.on { background: var(--lime); border-color: var(--lime); color: #0a0a0a; }
   .num {
-    width: 46px; font: inherit; font-size: 15px; text-align: center;
-    border: 1px solid var(--border); border-radius: 8px;
-    background: var(--surface-2); color: var(--text-primary);
-    padding: 6px 2px; font-variant-numeric: tabular-nums;
+    width: 48px; font: inherit; font-size: 15px; text-align: center;
+    border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2);
+    color: var(--text); padding: 7px 2px; font-variant-numeric: tabular-nums;
   }
-  .num:focus { outline: none; border-color: var(--accent); background: var(--surface-1); }
-  .mult { color: var(--text-muted); font-size: 13px; }
-  .name-cell { display: flex; align-items: center; }
-  .person-col { border-left: 1px solid var(--gridline); }
-  .person-head { color: var(--accent); }
+  .num:focus { outline: none; border-color: var(--lime); background: var(--bg); }
+  .pcol { border-left: 1px solid var(--line); }
+  .phead { color: var(--amber); font-weight: 800; }
+  .addrow { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 
-  .add-set { margin-top: 8px; }
-  .set-del { color: var(--text-muted); border: none; background: none; cursor: pointer; font-size: 15px; padding: 2px 4px; }
+  /* ---- Панель тоннажа ---- */
+  .tonnage {
+    display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0 14px;
+  }
+  .ton-tile {
+    flex: 1 1 120px; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 12px 14px;
+  }
+  .ton-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .ton-val { font-size: 20px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; margin-top: 3px; }
+  .ton-val .u { font-size: 12px; color: var(--muted); font-weight: 600; margin-left: 3px; }
 
-  .foot-actions { margin-top: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+  /* ---- Таймер отдыха ---- */
+  .rest-bar {
+    position: sticky; bottom: 0; z-index: 30;
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    padding: 12px 16px; margin-top: 18px;
+  }
+  .rest-time { font-size: 26px; font-weight: 800; color: var(--lime); font-variant-numeric: tabular-nums; min-width: 74px; }
+  .rest-time.zero { color: var(--amber); }
+  .rest-btns { display: flex; gap: 8px; flex: 1; flex-wrap: wrap; }
 
-  .hint { color: var(--text-muted); font-size: 13px; margin: 10px 2px 0; }
+  /* ---- История / прогресс ---- */
+  .hist-item {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 16px; margin-bottom: 10px;
+  }
+  .hist-date { font-weight: 800; font-size: 15px; }
+  .hist-note { color: var(--text-2); font-size: 13px; margin-top: 6px; white-space: pre-wrap; }
+  .hist-sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+  .chart-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+  .chart-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .chart-delta { font-weight: 700; }
+
+  .note-area {
+    width: 100%; font: inherit; font-size: 14px; color: var(--text);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 12px 14px; margin-bottom: 14px; resize: vertical; min-height: 54px;
+  }
+  .note-area:focus { outline: none; border-color: var(--lime); }
+  .note-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 2px 6px; }
+
   .saved-flash {
     position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
-    background: var(--text-primary); color: var(--page-plane);
-    padding: 8px 16px; border-radius: 999px; font-size: 13px;
-    opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 50;
+    background: var(--lime); color: #0a0a0a; padding: 8px 16px; border-radius: 999px;
+    font-size: 13px; font-weight: 700; opacity: 0; pointer-events: none;
+    transition: opacity .2s; z-index: 60;
   }
-  .saved-flash.show { opacity: .92; }
+  .saved-flash.show { opacity: .95; }
 
-  @media (max-width: 420px) {
-    .num { width: 40px; }
-    body { font-size: 15px; }
-  }
+  @media (max-width: 420px) { .num { width: 42px; } body { font-size: 15px; } }
+  @media (prefers-reduced-motion: reduce) { .saved-flash { transition: none; } }
 </style>
 </head>
 <body>
 <div class="app">
-  <header class="top">
-    <button class="btn-ghost" id="back-btn" style="display:none">← Назад</button>
-    <h1 id="title">Трекер тренировок</h1>
-    <div class="btn-row" id="top-actions"></div>
+  <header class="hero">
+    <div class="eyebrow" id="eyebrow"><span>@ilya.fitpro</span></div>
+    <h1 class="title" id="title">ТВОИ <span class="hl">КЛИЕНТЫ</span></h1>
+    <p class="subtitle" id="subtitle"></p>
   </header>
-
-  <p class="crumbs" id="crumbs"></p>
+  <div class="toolbar" id="toolbar"></div>
   <div id="view"></div>
 </div>
-
 <div class="saved-flash" id="flash">Сохранено</div>
 
 <script>
-/* Видимый перехват ошибок: если что-то падает (особенно во встроенных
-   WebView — Telegram, Happ и т.п.), показываем текст ошибки на экране,
-   а не белый лист. */
-window.onerror = function (msg, src, line, col) {
-  try {
-    var v = document.getElementById("view");
-    if (v) v.innerHTML = '<p class="hint" style="color:#d03b3b">Ошибка: ' +
-      String(msg) + ' (стр. ' + line + ')</p>' +
-      '<p class="hint">Откройте файл в Safari — встроенные браузеры приложений часто урезаны.</p>';
-  } catch (e) {}
-  return false;
-};
+(function () {
+  "use strict";
 
-/* =========================================================================
-   ТРЕКЕР ТРЕНИРОВОК — самостоятельное приложение.
-   - Данные хранятся в localStorage браузера (ключ TRACKER_KEY), автосохранение.
-   - Кнопка «Экспорт» скачивает JSON-файл, «Импорт» — загружает его обратно.
-   - Стартовые данные (SEED) — программа Анвара и Данила из плана в CRM.
-   - Всё редактируется: галочки, названия, вес и повторы (отдельно для Анвара
-     и Данила), добавление/удаление подходов и упражнений.
-   ========================================================================= */
+  var KEY = "gym_tracker_v1";
+  var BACKUP = "gym_tracker_v1_backup";
 
-  const TRACKER_KEY = "gym_tracker_v1";
-
-  // Стартовые данные. Каждый подход хранит вес/повторы отдельно по людям пары.
-  // Загружаются только если в localStorage ещё пусто.
-  const SEED = {
-    клиенты: [
-      {
-        id: "anvar-danil",
-        имя: "Анвар и Данил",
-        люди: ["Анвар", "Данил"],
-        дни: [
-          {
-            id: "day1",
-            название: "День 1 — Full Body",
-            упражнения: [
-              ex("Приседания со штангой", [
-                set(false, {Анвар:[30,12], Данил:[30,12]}),
-                set(false, {Анвар:[30,12], Данил:[30,12]}),
-                set(false, {Анвар:[30,12], Данил:[30,12]}),
-              ]),
-              ex("Жим штанги лёжа", [
-                set(false, {Анвар:[40,6], Данил:[40,10]}),
-                set(false, {Анвар:[40,6], Данил:[40,10]}),
-                set(false, {Анвар:[40,6], Данил:[40,10]}),
-              ]),
-              ex("Тяга верхнего блока", [
-                set(false, {Анвар:[30,12], Данил:[30,12]}),
-                set(false, {Анвар:[30,12], Данил:[30,12]}),
-                set(false, {Анвар:[30,12], Данил:[30,12]}),
-              ]),
-              ex("Бицепс «молотки»", [
-                set(false, {Анвар:[8,8], Данил:[10,10]}),
-                set(false, {Анвар:[8,8], Данил:[10,10]}),
-                set(false, {Анвар:[8,8], Данил:[10,10]}),
-              ]),
-              ex("Махи в стороны", [
-                set(false, {Анвар:[6,15], Данил:[6,15]}),
-                set(false, {Анвар:[6,15], Данил:[6,15]}),
-                set(false, {Анвар:[6,15], Данил:[6,15]}),
-              ]),
-            ],
-          },
-          {
-            id: "day2",
-            название: "День 2 — Full Body",
-            упражнения: [
-              ex("Разгибание голени в тренажёре сидя", defSets()),
-              ex("Сгибание голени в тренажёре лёжа", defSets()),
-              ex("Жим гантелей на наклонной скамье", defSets()),
-              ex("Горизонтальная тяга в рычажном тренажёре (хаммер)", defSets()),
-              ex("Трицепс на блоке с прямой рукояткой", defSets()),
-            ],
-          },
-          {
-            id: "day3",
-            название: "День 3 — Full Body",
-            упражнения: [
-              ex("Жим ногами в платформе", defSets()),
-              ex("Жим в грудном рычажном тренажёре (хаммер)", defSets()),
-              ex("Тяга верхнего блока узким обратным хватом", defSets()),
-              ex("Горизонтальная тяга в блоке", defSets()),
-              ex("Подъём штанги на бицепс", defSets()),
-            ],
-          },
-        ],
-      },
-    ],
-  };
+  function uid() { return "x" + Math.random().toString(36).slice(2, 9); }
+  function todayISO() { return new Date().toISOString().slice(0, 10); }
 
   function ex(название, подходы) {
-    return { id: uid(), название, сделано: false, подходы };
+    return { id: uid(), название: название, сделано: false, подходы: подходы };
   }
   function set(разминка, веса) {
-    // веса: { Имя: [вес, повторы] }
-    const данные = {};
-    for (const person in веса) данные[person] = { вес: веса[person][0], повт: веса[person][1] };
-    return { id: uid(), разминка, отмечен: false, данные };
+    var данные = {};
+    for (var p in веса) данные[p] = { вес: веса[p][0], повт: веса[p][1] };
+    return { id: uid(), разминка: разминка, отмечен: false, данные: данные };
   }
-  function defSets() {
-    // 3 рабочих подхода с пустыми весами (заполняются на тренировке)
-    const blank = { Анвар: [null, null], Данил: [null, null] };
-    return [ set(false, blank), set(false, blank), set(false, blank) ];
-  }
-  function uid() { return "x" + Math.random().toString(36).slice(2, 9); }
-
-  // ---- Хранилище (устойчивое, для офлайн-файла на телефоне) ----
-  // Пишем в два ключа localStorage + дублируем во второе хранилище, чтобы
-  // пережить возможный сброс Safari у file://. Читаем из первого живого.
-  const BACKUP_KEY = TRACKER_KEY + "_backup";
-  let memStore = {};
-
-  function rawSet(key, val) {
-    try { localStorage.setItem(key, val); } catch (e) {}
-    memStore[key] = val;
-  }
-  function rawGet(key) {
-    try {
-      const v = localStorage.getItem(key);
-      if (v != null) return v;
-    } catch (e) {}
-    return memStore[key] != null ? memStore[key] : null;
+  function defSets(люди) {
+    function blank() { var b = {}; люди.forEach(function (p) { b[p] = [null, null]; }); return b; }
+    return [ set(false, blank()), set(false, blank()), set(false, blank()) ];
   }
 
+  // ---- Стартовые данные (Анвар и Данил) ----
+  var SEED = {
+    клиенты: [{
+      id: "anvar-danil",
+      имя: "Анвар и Данил",
+      люди: ["Анвар", "Данил"],
+      абонемент: { всего: 6, осталось: 5, сумма: 12000 },
+      дни: [
+        { id: "day1", название: "День 1 — Full Body", заметка: "", история: [], упражнения: [
+          ex("Приседания со штангой", [ set(false,{Анвар:[30,12],Данил:[30,12]}), set(false,{Анвар:[30,12],Данил:[30,12]}), set(false,{Анвар:[30,12],Данил:[30,12]}) ]),
+          ex("Жим штанги лёжа", [ set(false,{Анвар:[40,6],Данил:[40,10]}), set(false,{Анвар:[40,6],Данил:[40,10]}), set(false,{Анвар:[40,6],Данил:[40,10]}) ]),
+          ex("Тяга верхнего блока", [ set(false,{Анвар:[30,12],Данил:[30,12]}), set(false,{Анвар:[30,12],Данил:[30,12]}), set(false,{Анвар:[30,12],Данил:[30,12]}) ]),
+          ex("Бицепс «молотки»", [ set(false,{Анвар:[8,8],Данил:[10,10]}), set(false,{Анвар:[8,8],Данил:[10,10]}), set(false,{Анвар:[8,8],Данил:[10,10]}) ]),
+          ex("Махи в стороны", [ set(false,{Анвар:[6,15],Данил:[6,15]}), set(false,{Анвар:[6,15],Данил:[6,15]}), set(false,{Анвар:[6,15],Данил:[6,15]}) ]),
+        ]},
+        { id: "day2", название: "День 2 — Full Body", заметка: "", история: [], упражнения: [
+          ex("Разгибание голени в тренажёре сидя", defSets(["Анвар","Данил"])),
+          ex("Сгибание голени в тренажёре лёжа", defSets(["Анвар","Данил"])),
+          ex("Жим гантелей на наклонной скамье", defSets(["Анвар","Данил"])),
+          ex("Горизонтальная тяга в рычажном тренажёре (хаммер)", defSets(["Анвар","Данил"])),
+          ex("Трицепс на блоке с прямой рукояткой", defSets(["Анвар","Данил"])),
+        ]},
+        { id: "day3", название: "День 3 — Full Body", заметка: "", история: [], упражнения: [
+          ex("Жим ногами в платформе", defSets(["Анвар","Данил"])),
+          ex("Жим в грудном рычажном тренажёре (хаммер)", defSets(["Анвар","Данил"])),
+          ex("Тяга верхнего блока узким обратным хватом", defSets(["Анвар","Данил"])),
+          ex("Горизонтальная тяга в блоке", defSets(["Анвар","Данил"])),
+          ex("Подъём штанги на бицепс", defSets(["Анвар","Данил"])),
+        ]},
+      ],
+    }],
+  };
+
+  // ---- Хранилище ----
+  var memStore = {};
+  function rawSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} memStore[k] = v; }
+  function rawGet(k) { try { var v = localStorage.getItem(k); if (v != null) return v; } catch (e) {} return memStore[k] != null ? memStore[k] : null; }
+
+  function migrate(d) {
+    // Достраиваем новые поля, если открылись старые данные.
+    if (!d || !Array.isArray(d.клиенты)) return JSON.parse(JSON.stringify(SEED));
+    d.клиенты.forEach(function (c) {
+      if (!Array.isArray(c.люди)) c.люди = ["Клиент"];
+      if (!c.абонемент) c.абонемент = { всего: null, осталось: null, сумма: null };
+      if (!Array.isArray(c.дни)) c.дни = [];
+      c.дни.forEach(function (day) {
+        if (typeof day.заметка !== "string") day.заметка = "";
+        if (!Array.isArray(day.история)) day.история = [];
+        (day.упражнения || []).forEach(function (e) {
+          if (!Array.isArray(e.подходы)) e.подходы = [];
+        });
+      });
+    });
+    return d;
+  }
   function load() {
-    const raw = rawGet(TRACKER_KEY) || rawGet(BACKUP_KEY);
-    if (raw) {
-      try { return JSON.parse(raw); } catch (e) {}
-    }
+    var raw = rawGet(KEY) || rawGet(BACKUP);
+    if (raw) { try { return migrate(JSON.parse(raw)); } catch (e) {} }
     return JSON.parse(JSON.stringify(SEED));
   }
-  let data = load();
+  var data = load();
 
-  let saveTimer = null;
+  var saveTimer = null;
   function save() {
-    const json = JSON.stringify(data);
-    rawSet(TRACKER_KEY, json);
-    rawSet(BACKUP_KEY, json);
+    var json = JSON.stringify(data);
+    rawSet(KEY, json); rawSet(BACKUP, json);
     clearTimeout(saveTimer);
-    if (flash) {
-      flash.classList.add("show");
-      saveTimer = setTimeout(() => flash.classList.remove("show"), 900);
-    }
+    if (flash) { flash.classList.add("show"); saveTimer = setTimeout(function () { flash.classList.remove("show"); }, 900); }
   }
+  window.addEventListener("pagehide", function () { try { save(); } catch (e) {} });
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") { try { save(); } catch (e) {} } });
 
-  // Подстраховка: при сворачивании/закрытии вкладки принудительно сохраняем.
-  window.addEventListener("pagehide", () => { try { save(); } catch (e) {} });
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") { try { save(); } catch (e) {} }
-  });
-
-  // ---- Роутинг по хешу: #/ , #/client/ID , #/client/ID/day/DAYID ----
-  const view = document.getElementById("view");
-  const titleEl = document.getElementById("title");
-  const crumbsEl = document.getElementById("crumbs");
-  const backBtn = document.getElementById("back-btn");
-  const topActions = document.getElementById("top-actions");
-  const flash = document.getElementById("flash");
-
-  function findClient(cid) { return data.клиенты.find(c => c.id === cid); }
-  function findDay(client, did) { return client && client.дни.find(d => d.id === did); }
+  // ---- DOM ----
+  var view = document.getElementById("view");
+  var titleEl = document.getElementById("title");
+  var subtitleEl = document.getElementById("subtitle");
+  var eyebrowEl = document.getElementById("eyebrow");
+  var toolbarEl = document.getElementById("toolbar");
+  var flash = document.getElementById("flash");
 
   function esc(s) {
-    return String(s ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (ch) {
+      return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[ch];
+    });
   }
-
+  function findClient(cid) { return data.клиенты.find(function (c) { return c.id === cid; }); }
+  function findDay(client, did) { return client && client.дни.find(function (d) { return d.id === did; }); }
+  function findClientOfDay(day) { return data.клиенты.find(function (c) { return c.дни.some(function (d) { return d.id === day.id; }); }); }
   function dayProgress(day) {
-    const total = day.упражнения.length;
-    const done = day.упражнения.filter(e => e.сделано).length;
-    return { done, total };
+    return { done: day.упражнения.filter(function (e) { return e.сделано; }).length, total: day.упражнения.length };
   }
 
-  // ---------- Экран: список клиентов ----------
+  function setHeader(eyebrowHtml, titleHtml, subtitle) {
+    eyebrowEl.innerHTML = eyebrowHtml;
+    titleEl.innerHTML = titleHtml;
+    // длинные заголовки — компактнее, чтобы не обрезались
+    var plain = titleEl.textContent || "";
+    titleEl.classList.toggle("compact", plain.length > 16);
+    subtitleEl.textContent = subtitle || "";
+    subtitleEl.style.display = subtitle ? "" : "none";
+  }
+
+  // Заголовок дня: часть после тире — лаймовым акцентом
+  function dayTitleHtml(name) {
+    var idx = name.indexOf("—");
+    if (idx === -1) return '<span class="hl">' + esc(name) + '</span>';
+    var before = name.slice(0, idx + 1);
+    var after = name.slice(idx + 1).trim();
+    return esc(before) + ' <span class="hl">' + esc(after) + '</span>';
+  }
+
+  // ================= ЭКРАН: КЛИЕНТЫ =================
   function renderClients() {
-    titleEl.textContent = "Клиенты";
-    backBtn.style.display = "none";
-    crumbsEl.innerHTML = "";
-    topActions.innerHTML = "";
-    if (data.клиенты.length === 0) {
-      view.innerHTML = '<p class="hint">Пока нет клиентов.</p>';
+    setHeader('<span>@ilya.fitpro</span>', 'ТВОИ <span class="hl">КЛИЕНТЫ</span>',
+      data.клиенты.length ? (data.клиенты.length + " активных · выбери, чтобы открыть") : "");
+    toolbarEl.innerHTML =
+      '<button class="btn btn-primary" data-act="add-client">+ Клиент</button>' +
+      '<button class="btn btn-ghost" data-act="export">Экспорт</button>' +
+      '<button class="btn btn-ghost" data-act="import">Импорт</button>';
+    if (!data.клиенты.length) {
+      view.innerHTML = '<p class="empty">Пока нет клиентов.<br>Нажми «+ Клиент», чтобы добавить.</p>';
       return;
     }
-    view.innerHTML = '<div class="tile-list">' + data.клиенты.map(c => `
-      <button class="tile" data-nav="#/client/${esc(c.id)}">
-        <span>
-          <span class="tile-title">${esc(c.имя)}</span>
-          <span class="tile-sub">${c.дни.length} дн. программы</span>
-        </span>
-        <span class="tile-chevron">›</span>
-      </button>`).join("") + '</div>';
-  }
-
-  // ---------- Экран: дни клиента ----------
-  function renderClient(cid) {
-    const client = findClient(cid);
-    if (!client) { location.hash = "#/"; return; }
-    titleEl.textContent = client.имя;
-    backBtn.style.display = "";
-    backBtn.dataset.nav = "#/";
-    crumbsEl.innerHTML = `<b>${esc(client.имя)}</b>`;
-    topActions.innerHTML = "";
-    view.innerHTML = '<div class="tile-list">' + client.дни.map(d => {
-      const p = dayProgress(d);
-      return `
-      <button class="tile" data-nav="#/client/${esc(client.id)}/day/${esc(d.id)}">
-        <span>
-          <span class="tile-title">${esc(d.название)}</span>
-          <span class="tile-sub">${d.упражнения.length} упражнений</span>
-        </span>
-        <span class="tile-progress">${p.done}/${p.total} ✓</span>
-      </button>`;
+    view.innerHTML = '<div class="list">' + data.клиенты.map(function (c) {
+      var kind = c.люди.length > 1 ? "пара" : "1 человек";
+      return '<button class="tile" data-nav="#/client/' + esc(c.id) + '">' +
+        '<span><span class="tile-title">' + esc(c.имя) + '</span>' +
+        '<span class="tile-sub">' + kind + ' · ' + c.дни.length + ' дн. программы</span></span>' +
+        '<span class="tile-chevron">›</span></button>';
     }).join("") + '</div>';
   }
 
-  // ---------- Экран: тренировка (день) ----------
-  function renderDay(cid, did) {
-    const client = findClient(cid);
-    const day = findDay(client, did);
-    if (!day) { location.hash = "#/client/" + cid; return; }
-    titleEl.textContent = day.название;
-    backBtn.style.display = "";
-    backBtn.dataset.nav = "#/client/" + cid;
-    crumbsEl.innerHTML = `<b>${esc(client.имя)}</b> › ${esc(day.название)}`;
-    topActions.innerHTML = `<button class="btn" data-act="export">Экспорт</button>`;
+  // ================= ЭКРАН: КЛИЕНТ (дни) =================
+  function abonInfo(ab) {
+    if (!ab || ab.осталось == null) return { cls: "", text: "не задан" };
+    var cls = ab.осталось <= 0 ? "crit" : (ab.осталось <= 2 ? "warn" : "");
+    return { cls: cls, text: ab.осталось + " из " + (ab.всего != null ? ab.всего : "?") };
+  }
+  function renderClient(cid) {
+    var client = findClient(cid);
+    if (!client) { location.hash = "#/"; return; }
+    var titleHl = client.люди.length > 1
+      ? esc(client.люди[0]) + ' <span class="hl">и ' + esc(client.люди.slice(1).join(", ")) + '</span>'
+      : '<span class="hl">' + esc(client.имя) + '</span>';
+    setHeader('<button class="back" data-nav="#/">← клиенты</button>', titleHl,
+      (client.люди.length > 1 ? "пара" : "1 человек") + " · " + client.дни.length + " дн. программы");
+    toolbarEl.innerHTML =
+      '<button class="btn btn-primary" data-act="add-day">+ День</button>' +
+      '<button class="btn btn-ghost" data-act="export">Экспорт</button>' +
+      '<button class="btn btn-ghost" data-act="del-client">Удалить клиента</button>';
 
-    const people = client.люди;
-    view.innerHTML = day.упражнения.map((e, ei) => renderExercise(e, ei, people)).join("")
-      + `<div class="foot-actions">
-           <button class="btn" data-act="add-ex">+ упражнение</button>
-           <button class="btn btn-ghost" data-act="reset-checks">Снять все галочки</button>
-         </div>
-         <p class="hint">Всё редактируется: коснитесь названия, веса или повторов. Галочка ✓ — подход/упражнение сделано. Данные сохраняются автоматически.</p>`;
+    var ab = client.абонемент, ai = abonInfo(ab);
+    var abonHtml =
+      '<div class="abon"><div class="abon-row">' +
+        '<div><div class="abon-left">Абонемент · осталось тренировок</div>' +
+        '<div class="abon-big ' + ai.cls + '">' + ai.text + '</div></div>' +
+        '<button class="abon-edit" data-act="edit-abon">изменить</button>' +
+      '</div>' +
+      (ab && ab.сумма ? '<div class="abon-left" style="margin-top:8px">Оплачено: ' + Number(ab.сумма).toLocaleString("ru-RU") + ' ₽</div>' : '') +
+      '</div>';
+
+    var daysHtml = client.дни.length
+      ? '<div class="list">' + client.дни.map(function (d) {
+          var p = dayProgress(d), pct = p.total ? Math.round(p.done / p.total * 100) : 0;
+          return '<button class="tile" data-nav="#/client/' + esc(client.id) + '/day/' + esc(d.id) + '">' +
+            '<span><span class="tile-title">' + esc(d.название) + '</span>' +
+            '<span class="tile-sub">' + d.упражнения.length + ' упражнений' +
+              (d.история && d.история.length ? ' · ' + d.история.length + ' трен. в истории' : '') + '</span></span>' +
+            '<span class="tile-prog"><span class="prog-num">' + p.done + '/' + p.total + ' ✓</span>' +
+            '<span class="prog-track"><span class="prog-fill" style="width:' + pct + '%"></span></span></span>' +
+            '</button>';
+        }).join("") + '</div>'
+      : '<p class="empty">Дней пока нет. Нажми «+ День».</p>';
+
+    view.innerHTML = abonHtml + daysHtml;
+  }
+
+  // ================= ЭКРАН: ДЕНЬ (тренировка) =================
+  var currentDay = null;
+
+  function workIndex(sets, si) {
+    var n = 0; for (var i = 0; i <= si; i++) if (!sets[i].разминка) n++; return n;
+  }
+  function tonnage(day, person) {
+    var t = 0;
+    day.упражнения.forEach(function (e) {
+      e.подходы.forEach(function (s) {
+        if (!s.отмечен) return;
+        var d = s.данные[person];
+        if (d && typeof d.вес === "number" && typeof d.повт === "number") t += d.вес * d.повт;
+      });
+    });
+    return t;
+  }
+  function best1RM(day, person) {
+    var best = 0;
+    day.упражнения.forEach(function (e) {
+      e.подходы.forEach(function (s) {
+        var d = s.данные[person];
+        if (d && typeof d.вес === "number" && typeof d.повт === "number" && d.повт > 0) {
+          var rm = d.вес * (1 + d.повт / 30);
+          if (rm > best) best = rm;
+        }
+      });
+    });
+    return best;
+  }
+
+  function renderDay(cid, did) {
+    var client = findClient(cid);
+    var day = findDay(client, did);
+    if (!day) { location.hash = "#/client/" + cid; return; }
+    currentDay = day;
+    setHeader('<button class="back" data-nav="#/client/' + esc(cid) + '">← ' + esc(client.имя) + '</button>',
+      dayTitleHtml(day.название), "");
+
+    toolbarEl.innerHTML =
+      '<button class="btn btn-primary" data-act="finish-day">✓ Завершить тренировку</button>' +
+      '<button class="btn btn-ghost" data-nav="#/client/' + esc(cid) + '/day/' + esc(did) + '/history">История' +
+        (day.история.length ? ' (' + day.история.length + ')' : '') + '</button>';
+
+    var people = client.люди;
+
+    // панель тоннажа
+    var tonHtml = '<div class="tonnage">' + people.map(function (p) {
+      var t = tonnage(day, p), rm = best1RM(day, p);
+      return '<div class="ton-tile"><div class="ton-label">' + esc(p) + ' · тоннаж</div>' +
+        '<div class="ton-val">' + (t ? t.toLocaleString("ru-RU") : "0") + '<span class="u">кг</span></div>' +
+        '<div class="ton-label" style="margin-top:8px">оценка 1ПМ</div>' +
+        '<div class="ton-val">' + (rm ? Math.round(rm) : "—") + '<span class="u">кг</span></div></div>';
+    }).join("") + '</div>';
+
+    // повтор прошлой + название дня редактируемое
+    var repeatBtn = day.история.length
+      ? '<div class="addrow"><button class="btn btn-ghost" data-act="repeat-last">↺ Повторить прошлую тренировку</button></div>'
+      : '';
+
+    var exHtml = day.упражнения.map(function (e, ei) { return renderExercise(e, ei, people); }).join("");
+
+    var noteHtml =
+      '<p class="note-label">Заметка к тренировке</p>' +
+      '<textarea class="note-area" data-act="edit-note" placeholder="Например: у Данила болело колено, в след. раз +2.5 кг в жиме…">' + esc(day.заметка) + '</textarea>';
+
+    var restHtml =
+      '<div class="rest-bar"><span class="rest-time" id="rest-time">1:30</span>' +
+      '<div class="rest-btns">' +
+        '<button class="btn btn-primary" data-act="rest-start">Отдых 90 с</button>' +
+        '<button class="btn btn-ghost" data-act="rest-60">60</button>' +
+        '<button class="btn btn-ghost" data-act="rest-120">120</button>' +
+        '<button class="btn btn-ghost" data-act="rest-stop">Стоп</button>' +
+      '</div></div>';
+
+    view.innerHTML = tonHtml + repeatBtn + exHtml +
+      '<div class="addrow"><button class="btn btn-primary btn-block" data-act="add-ex">+ Упражнение</button></div>' +
+      noteHtml + restHtml +
+      '<p class="hint">Всё редактируется: коснись названия, веса или повторов. «Завершить тренировку» запишет дату в историю и спишет занятие с абонемента.</p>';
   }
 
   function renderExercise(e, ei, people) {
-    const headCols = people.map(p => `<th colspan="2" class="person-col person-head">${esc(p)}</th>`).join("");
-    const subCols = people.map(() => `<th class="person-col">кг</th><th>раз</th>`).join("");
-    const rows = e.подходы.map((s, si) => renderSetRow(s, si, ei, people)).join("");
-    return `
-      <div class="exercise ${e.сделано ? "done" : ""}" data-ex="${ei}">
-        <div class="ex-head">
-          <button class="ex-check ${e.сделано ? "on" : ""}" data-act="toggle-ex" data-ex="${ei}" title="Упражнение сделано">✓</button>
-          <input class="ex-name" data-act="rename-ex" data-ex="${ei}" value="${esc(e.название)}" />
-          <button class="ex-del" data-act="del-ex" data-ex="${ei}" title="Удалить упражнение">✕</button>
-        </div>
-        <table class="sets">
-          <thead>
-            <tr><th class="lbl"></th><th></th>${headCols}</tr>
-            <tr><th class="lbl">подход</th><th>✓</th>${subCols}</tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-        <div class="add-set btn-row">
-          <button class="btn" data-act="add-set" data-ex="${ei}">+ подход</button>
-          <button class="btn btn-ghost" data-act="add-warm" data-ex="${ei}">+ разминка</button>
-        </div>
-      </div>`;
-  }
-
-  function renderSetRow(s, si, ei, people) {
-    const label = s.разминка
-      ? `<span class="warm-tag">разм.</span>`
-      : `раб. ${workIndex(ei, si)}`;
-    const cells = people.map(p => {
-      const d = s.данные[p] || { вес: null, повт: null };
-      return `
-        <td class="person-col"><input class="num" inputmode="decimal" data-act="edit-weight" data-ex="${ei}" data-set="${si}" data-person="${esc(p)}" value="${d.вес ?? ""}" placeholder="–"></td>
-        <td><input class="num" inputmode="numeric" data-act="edit-reps" data-ex="${ei}" data-set="${si}" data-person="${esc(p)}" value="${d.повт ?? ""}" placeholder="–"></td>`;
+    var headCols = people.map(function (p) { return '<th colspan="2" class="pcol phead">' + esc(p) + '</th>'; }).join("");
+    var subCols = people.map(function () { return '<th class="pcol">кг</th><th>раз</th>'; }).join("");
+    var rows = e.подходы.map(function (s, si) {
+      var label = s.разминка ? '<span class="warm">разм.</span>' : ('раб. ' + workIndex(e.подходы, si));
+      var cells = people.map(function (p) {
+        var d = s.данные[p] || { вес: null, повт: null };
+        return '<td class="pcol"><input class="num" inputmode="decimal" data-act="edit-weight" data-ex="' + ei + '" data-set="' + si + '" data-person="' + esc(p) + '" value="' + (d.вес == null ? "" : d.вес) + '" placeholder="–"></td>' +
+          '<td><input class="num" inputmode="numeric" data-act="edit-reps" data-ex="' + ei + '" data-set="' + si + '" data-person="' + esc(p) + '" value="' + (d.повт == null ? "" : d.повт) + '" placeholder="–"></td>';
+      }).join("");
+      return '<tr><td class="slab">' + label + '</td>' +
+        '<td><button class="scheck ' + (s.отмечен ? "on" : "") + '" data-act="toggle-set" data-ex="' + ei + '" data-set="' + si + '">✓</button></td>' +
+        cells +
+        '<td><button class="ex-btn del" data-act="del-set" data-ex="' + ei + '" data-set="' + si + '">✕</button></td></tr>';
     }).join("");
-    return `
-      <tr>
-        <td class="set-label">${label}</td>
-        <td><button class="set-check ${s.отмечен ? "on" : ""}" data-act="toggle-set" data-ex="${ei}" data-set="${si}">✓</button></td>
-        ${cells}
-        <td><button class="set-del" data-act="del-set" data-ex="${ei}" data-set="${si}" title="Удалить подход">✕</button></td>
-      </tr>`;
+    return '<div class="exercise ' + (e.сделано ? "done" : "") + '" data-ex="' + ei + '">' +
+      '<div class="ex-head">' +
+        '<button class="ex-check ' + (e.сделано ? "on" : "") + '" data-act="toggle-ex" data-ex="' + ei + '">✓</button>' +
+        '<input class="ex-name" data-act="rename-ex" data-ex="' + ei + '" value="' + esc(e.название) + '">' +
+        '<button class="ex-btn chart" data-act="chart-ex" data-ex="' + ei + '" title="Прогресс">📈</button>' +
+        '<button class="ex-btn del" data-act="del-ex" data-ex="' + ei + '">✕</button>' +
+      '</div>' +
+      '<div class="sets-wrap"><table class="sets">' +
+        '<thead><tr><th class="lbl"></th><th></th>' + headCols + '</tr>' +
+        '<tr><th class="lbl">подход</th><th>✓</th>' + subCols + '</tr></thead>' +
+        '<tbody>' + rows + '</tbody></table></div>' +
+      '<div class="addrow">' +
+        '<button class="btn btn-ghost" data-act="add-set" data-ex="' + ei + '">+ подход</button>' +
+        '<button class="btn btn-ghost" data-act="add-warm" data-ex="' + ei + '">+ разминка</button>' +
+      '</div></div>';
   }
 
-  // Номер рабочего подхода (без учёта разминочных) — для подписи «раб. N»
-  let currentDayCache = null;
-  function workIndex(ei, si) {
-    const day = currentDayCache;
-    if (!day) return si + 1;
-    const sets = day.упражнения[ei].подходы;
-    let n = 0;
-    for (let i = 0; i <= si; i++) if (!sets[i].разминка) n++;
-    return n;
+  // ================= ЭКРАН: ИСТОРИЯ =================
+  function renderHistory(cid, did) {
+    var client = findClient(cid);
+    var day = findDay(client, did);
+    if (!day) { location.hash = "#/client/" + cid; return; }
+    setHeader('<button class="back" data-nav="#/client/' + esc(cid) + '/day/' + esc(did) + '">← ' + esc(day.название) + '</button>',
+      'ИСТО<span class="hl">РИЯ</span>', day.история.length + " тренировок записано");
+    toolbarEl.innerHTML = "";
+    if (!day.история.length) {
+      view.innerHTML = '<p class="empty">Пока нет записанных тренировок.<br>Заверши тренировку на экране дня — она появится здесь с датой.</p>';
+      return;
+    }
+    var items = day.история.slice().sort(function (a, b) { return (b.дата || "").localeCompare(a.дата || ""); });
+    view.innerHTML = items.map(function (h) {
+      var dt = new Date(h.дата + "T00:00:00");
+      var ds = isNaN(dt) ? h.дата : new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" }).format(dt);
+      var sub = (h.тоннаж ? Object.keys(h.тоннаж).map(function (p) { return p + ": " + h.тоннаж[p] + " кг"; }).join(" · ") : "");
+      return '<div class="hist-item"><div class="hist-date">' + esc(ds) + '</div>' +
+        (sub ? '<div class="hist-sub">Тоннаж — ' + esc(sub) + '</div>' : '') +
+        (h.заметка ? '<div class="hist-note">' + esc(h.заметка) + '</div>' : '') + '</div>';
+    }).join("");
   }
 
-  // ---- Действия на экране дня ----
-  function currentDayFromHash() {
-    const m = location.hash.match(/^#\/client\/([^/]+)\/day\/([^/]+)$/);
-    if (!m) return null;
-    const client = findClient(decodeURIComponent(m[1]));
-    return findDay(client, decodeURIComponent(m[2]));
+  // ================= ЭКРАН: ПРОГРЕСС УПРАЖНЕНИЯ =================
+  function renderChart(cid, did, exId) {
+    var client = findClient(cid);
+    var day = findDay(client, did);
+    if (!day) { location.hash = "#/client/" + cid; return; }
+    var exName = decodeURIComponent(exId);
+    setHeader('<button class="back" data-nav="#/client/' + esc(cid) + '/day/' + esc(did) + '">← ' + esc(day.название) + '</button>',
+      'ПРОГ<span class="hl">РЕСС</span>', esc(exName));
+    toolbarEl.innerHTML = "";
+    // собираем по истории точки веса (макс рабочий вес на дату), по каждому человеку
+    var people = client.люди;
+    var html = people.map(function (p) {
+      var pts = [];
+      day.история.forEach(function (h) {
+        if (!h.снимок) return;
+        var rec = h.снимок[exName];
+        if (rec && rec[p] != null) pts.push({ дата: h.дата, вес: rec[p] });
+      });
+      pts.sort(function (a, b) { return (a.дата || "").localeCompare(b.дата || ""); });
+      return '<div class="chart-wrap"><div class="ton-label">' + esc(p) + '</div>' + sparkline(pts) + '</div>';
+    }).join("");
+    view.innerHTML = html || '<p class="empty">Нет данных.</p>';
+  }
+  function sparkline(pts) {
+    if (!pts.length) return '<p class="hint" style="margin-top:8px">Нет записанных тренировок с этим упражнением. Заверши хотя бы одну — и здесь появится график роста веса.</p>';
+    var W = 300, H = 90, px = 10, py = 14;
+    var ws = pts.map(function (p) { return p.вес; });
+    var min = Math.min.apply(null, ws), max = Math.max.apply(null, ws);
+    if (min === max) { min -= 1; max += 1; }
+    var n = pts.length;
+    var coords = pts.map(function (p, i) {
+      return { x: n === 1 ? W / 2 : px + i * (W - 2 * px) / (n - 1),
+               y: py + (1 - (p.вес - min) / (max - min)) * (H - 2 * py) };
+    });
+    var poly = coords.map(function (c) { return c.x.toFixed(1) + "," + c.y.toFixed(1); }).join(" ");
+    var dots = coords.map(function (c) { return '<circle cx="' + c.x.toFixed(1) + '" cy="' + c.y.toFixed(1) + '" r="4" fill="#d4f000"/>'; }).join("");
+    var delta = pts[pts.length - 1].вес - pts[0].вес;
+    var dLabel = pts.length > 1 ? (delta >= 0 ? "+" : "") + delta.toFixed(1) + " кг" : "";
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="90" style="margin-top:8px">' +
+      (pts.length > 1 ? '<polyline points="' + poly + '" fill="none" stroke="#d4f000" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' : '') +
+      dots + '</svg>' +
+      '<div class="chart-meta"><span>' + pts.length + ' точек</span>' +
+      (dLabel ? '<span class="chart-delta" style="color:' + (delta >= 0 ? "#3ddc84" : "#ff453a") + '">' + dLabel + '</span>' : '') + '</div>';
   }
 
-  view.addEventListener("click", (evt) => {
-    const btn = evt.target.closest("[data-act]");
+  // ================= ДЕЙСТВИЯ =================
+  function addClient() {
+    var name = prompt("Имя клиента (или первого из пары):");
+    if (!name) return;
+    name = name.trim(); if (!name) return;
+    var pair = confirm("Это пара (двое)? ОК — да, Отмена — один человек.");
+    var люди = [name], имя = name;
+    if (pair) {
+      var second = prompt("Имя второго:");
+      if (second && second.trim()) { люди.push(second.trim()); имя = name + " и " + second.trim(); }
+    }
+    var c = { id: uid(), имя: имя, люди: люди, абонемент: { всего: null, осталось: null, сумма: null }, дни: [] };
+    data.клиенты.push(c); save(); location.hash = "#/client/" + c.id;
+  }
+  function addDay(client) {
+    client.дни.push({ id: uid(), название: "Новый день", заметка: "", история: [], упражнения: [] });
+    save(); route();
+  }
+  function editAbon(client) {
+    var ab = client.абонемент || (client.абонемент = {});
+    var total = prompt("Всего тренировок в абонементе:", ab.всего != null ? ab.всего : "");
+    if (total !== null) ab.всего = total.trim() === "" ? null : Number(total);
+    var left = prompt("Осталось тренировок:", ab.осталось != null ? ab.осталось : (ab.всего != null ? ab.всего : ""));
+    if (left !== null) ab.осталось = left.trim() === "" ? null : Number(left);
+    var sum = prompt("Сумма оплаты, ₽:", ab.сумма != null ? ab.сумма : "");
+    if (sum !== null) ab.сумма = sum.trim() === "" ? null : Number(sum);
+    save(); route();
+  }
+  function finishDay(client, day) {
+    // снимок весов по упражнениям (макс рабочий вес на человека) для графиков прогресса
+    var снимок = {};
+    day.упражнения.forEach(function (e) {
+      var perPerson = {};
+      e.подходы.forEach(function (s) {
+        if (s.разминка) return;
+        for (var p in s.данные) {
+          var w = s.данные[p].вес;
+          if (typeof w === "number" && (perPerson[p] == null || w > perPerson[p])) perPerson[p] = w;
+        }
+      });
+      if (Object.keys(perPerson).length) снимок[e.название] = perPerson;
+    });
+    var ton = {};
+    client.люди.forEach(function (p) { ton[p] = tonnage(day, p); });
+    day.история.push({ дата: todayISO(), заметка: day.заметка || "", снимок: снимок, тоннаж: ton });
+    // списываем занятие
+    var ab = client.абонемент;
+    if (ab && typeof ab.осталось === "number") ab.осталось = Math.max(0, ab.осталось - 1);
+    // сбрасываем галочки для следующего раза (веса оставляем)
+    day.упражнения.forEach(function (e) { e.сделано = false; e.подходы.forEach(function (s) { s.отмечен = false; }); });
+    save();
+    alert("Тренировка записана в историю (" + todayISO() + ").");
+    route();
+  }
+  function repeatLast(day) {
+    if (!day.история.length) return;
+    var last = day.история[day.история.length - 1];
+    if (!last.снимок) { alert("В прошлой записи нет данных о весах."); return; }
+    day.упражнения.forEach(function (e) {
+      var rec = last.снимок[e.название];
+      if (!rec) return;
+      e.подходы.forEach(function (s) {
+        if (s.разминка) return;
+        for (var p in rec) { if (s.данные[p]) s.данные[p].вес = rec[p]; }
+      });
+    });
+    save(); route();
+    alert("Веса подставлены из прошлой тренировки.");
+  }
+
+  // ---- Таймер отдыха ----
+  var restTimer = null, restLeft = 0;
+  function fmt(sec) { var m = Math.floor(sec / 60), s = sec % 60; return m + ":" + (s < 10 ? "0" : "") + s; }
+  function restStart(sec) {
+    restStop();
+    restLeft = sec;
+    var el = document.getElementById("rest-time");
+    if (el) { el.textContent = fmt(restLeft); el.classList.remove("zero"); }
+    restTimer = setInterval(function () {
+      restLeft--;
+      var e = document.getElementById("rest-time");
+      if (restLeft <= 0) {
+        restStop();
+        if (e) { e.textContent = "0:00"; e.classList.add("zero"); }
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+        return;
+      }
+      if (e) e.textContent = fmt(restLeft);
+    }, 1000);
+  }
+  function restStop() { if (restTimer) { clearInterval(restTimer); restTimer = null; } }
+
+  // ---- Клики ---- (на body, чтобы ловить и кнопки тулбара, и view)
+  document.body.addEventListener("click", function (evt) {
+    var btn = evt.target.closest("[data-act]");
     if (!btn) return;
-    const act = btn.dataset.act;
-    const day = currentDayFromHash();
+    var act = btn.dataset.act;
+
+    // действия таймера — не требуют дня в модели
+    if (act === "rest-start") { restStart(90); return; }
+    if (act === "rest-60") { restStart(60); return; }
+    if (act === "rest-120") { restStart(120); return; }
+    if (act === "rest-stop") { restStop(); var e = document.getElementById("rest-time"); if (e) { e.textContent = "1:30"; e.classList.remove("zero"); } return; }
+
+    var m = location.hash.match(/^#\/client\/([^/]+)(?:\/day\/([^/]+))?/);
+    var client = m ? findClient(decodeURIComponent(m[1])) : null;
+    var day = (m && m[2] && client) ? findDay(client, decodeURIComponent(m[2])) : null;
 
     if (act === "export") { doExport(); return; }
-
-    if (!day) return;
-    const ei = btn.dataset.ex != null ? +btn.dataset.ex : null;
-    const si = btn.dataset.set != null ? +btn.dataset.set : null;
-
-    if (act === "toggle-ex") {
-      day.упражнения[ei].сделано = !day.упражнения[ei].сделано;
-      save(); route(); return;
-    }
-    if (act === "del-ex") {
-      if (confirm("Удалить упражнение «" + day.упражнения[ei].название + "»?")) {
-        day.упражнения.splice(ei, 1); save(); route();
+    if (act === "import") { doImport(); return; }
+    if (act === "add-client") { addClient(); return; }
+    if (act === "del-client") {
+      if (client && confirm("Удалить клиента «" + client.имя + "» со всеми данными?")) {
+        data.клиенты = data.клиенты.filter(function (c) { return c.id !== client.id; });
+        save(); location.hash = "#/";
       }
       return;
     }
+    if (act === "add-day") { if (client) addDay(client); return; }
+    if (act === "edit-abon") { if (client) editAbon(client); return; }
+
+    if (!day) return;
+    var ei = btn.dataset.ex != null ? +btn.dataset.ex : null;
+    var si = btn.dataset.set != null ? +btn.dataset.set : null;
+
+    if (act === "finish-day") { finishDay(client, day); return; }
+    if (act === "repeat-last") { repeatLast(day); return; }
+    if (act === "toggle-ex") { day.упражнения[ei].сделано = !day.упражнения[ei].сделано; save(); route(); return; }
+    if (act === "del-ex") { if (confirm("Удалить упражнение?")) { day.упражнения.splice(ei, 1); save(); route(); } return; }
+    if (act === "chart-ex") { location.hash = "#/client/" + client.id + "/day/" + day.id + "/chart/" + encodeURIComponent(day.упражнения[ei].название); return; }
     if (act === "add-ex") {
-      const client = findClientOfDay(day);
-      const blank = {}; client.люди.forEach(p => blank[p] = [null, null]);
-      day.упражнения.push(ex("Новое упражнение", [ set(false, blank), set(false, blank), set(false, blank) ]));
-      save(); route(); return;
+      day.упражнения.push(ex("Новое упражнение", defSets(client.люди))); save(); route(); return;
     }
-    if (act === "toggle-set") {
-      day.упражнения[ei].подходы[si].отмечен = !day.упражнения[ei].подходы[si].отмечен;
-      save(); route(); return;
-    }
+    if (act === "toggle-set") { day.упражнения[ei].подходы[si].отмечен = !day.упражнения[ei].подходы[si].отмечен; save(); route(); return; }
     if (act === "add-set" || act === "add-warm") {
-      const client = findClientOfDay(day);
-      const blank = {}; client.люди.forEach(p => blank[p] = [null, null]);
-      day.упражнения[ei].подходы.push(set(act === "add-warm", blank));
-      save(); route(); return;
+      var b = {}; client.люди.forEach(function (p) { b[p] = [null, null]; });
+      day.упражнения[ei].подходы.push(set(act === "add-warm", b)); save(); route(); return;
     }
-    if (act === "del-set") {
-      day.упражнения[ei].подходы.splice(si, 1); save(); route(); return;
-    }
-    if (act === "reset-checks") {
-      day.упражнения.forEach(e => { e.сделано = false; e.подходы.forEach(s => s.отмечен = false); });
-      save(); route(); return;
-    }
+    if (act === "del-set") { day.упражнения[ei].подходы.splice(si, 1); save(); route(); return; }
   });
 
-  // Правки текстовых полей (название/вес/повторы) — на input, без перерисовки
-  view.addEventListener("input", (evt) => {
-    const el = evt.target.closest("[data-act]");
+  // ---- Ввод (названия / веса / заметка) ----
+  view.addEventListener("input", function (evt) {
+    var el = evt.target.closest("[data-act]");
     if (!el) return;
-    const act = el.dataset.act;
-    const day = currentDayFromHash();
+    var act = el.dataset.act;
+    var m = location.hash.match(/^#\/client\/([^/]+)\/day\/([^/]+)/);
+    if (!m) return;
+    var client = findClient(decodeURIComponent(m[1]));
+    var day = findDay(client, decodeURIComponent(m[2]));
     if (!day) return;
-    const ei = +el.dataset.ex;
 
-    if (act === "rename-ex") {
-      day.упражнения[ei].название = el.value;
-      save(); return;
-    }
-    const si = +el.dataset.set;
-    const person = el.dataset.person;
-    const s = day.упражнения[ei].подходы[si];
+    if (act === "edit-note") { day.заметка = el.value; save(); return; }
+    var ei = +el.dataset.ex;
+    if (act === "rename-ex") { day.упражнения[ei].название = el.value; save(); return; }
+    var si = +el.dataset.set, person = el.dataset.person;
+    var s = day.упражнения[ei].подходы[si];
     if (!s.данные[person]) s.данные[person] = { вес: null, повт: null };
-    const val = el.value.trim();
-    const num = val === "" ? null : Number(val.replace(",", "."));
+    var val = el.value.trim();
+    var num = val === "" ? null : Number(val.replace(",", "."));
     if (act === "edit-weight") s.данные[person].вес = (val === "" || isNaN(num)) ? null : num;
-    if (act === "edit-reps")   s.данные[person].повт = (val === "" || isNaN(num)) ? null : num;
+    if (act === "edit-reps") s.данные[person].повт = (val === "" || isNaN(num)) ? null : num;
     save();
   });
 
-  function findClientOfDay(day) {
-    return data.клиенты.find(c => c.дни.some(d => d.id === day.id));
-  }
+  // ---- Навигация ----
+  document.body.addEventListener("click", function (e) {
+    var nav = e.target.closest("[data-nav]");
+    if (nav) { location.hash = nav.dataset.nav; }
+  });
 
-  // ---- Экспорт / Импорт ----
+  // ---- Экспорт/импорт ----
   function doExport() {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const stamp = new Date().toISOString().slice(0, 10);
-    a.href = url; a.download = "тренировки_" + stamp + ".json";
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
+    try {
+      var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url; a.download = "тренировки_" + todayISO() + ".json";
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    } catch (e) { prompt("Скопируй данные:", JSON.stringify(data)); }
   }
   function doImport() {
-    const inp = document.createElement("input");
+    var inp = document.createElement("input");
     inp.type = "file"; inp.accept = "application/json,.json";
-    inp.onchange = () => {
-      const file = inp.files[0]; if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
+    inp.onchange = function () {
+      var f = inp.files[0]; if (!f) return;
+      var r = new FileReader();
+      r.onload = function () {
         try {
-          const parsed = JSON.parse(reader.result);
+          var parsed = JSON.parse(r.result);
           if (!parsed || !Array.isArray(parsed.клиенты)) throw new Error("нет поля клиенты");
-          data = parsed; save(); route();
-          alert("Данные загружены.");
+          data = migrate(parsed); save(); route(); alert("Данные загружены.");
         } catch (e) { alert("Не удалось прочитать файл: " + e.message); }
       };
-      reader.readAsText(file);
+      r.readAsText(f);
     };
     inp.click();
   }
 
-  // ---- Кнопки в шапке на экране клиентов (экспорт/импорт всегда доступны) ----
-  function globalActions() {
-    return `<button class="btn" data-gact="export">Экспорт</button>
-            <button class="btn btn-ghost" data-gact="import">Импорт</button>`;
-  }
-  document.getElementById("top-actions").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-gact], [data-act]");
-    if (!b) return;
-    const a = b.dataset.gact || b.dataset.act;
-    if (a === "export") doExport();
-    if (a === "import") doImport();
-  });
-
   // ---- Роутер ----
-  backBtn.addEventListener("click", () => { if (backBtn.dataset.nav) location.hash = backBtn.dataset.nav; });
-  document.body.addEventListener("click", (e) => {
-    const nav = e.target.closest("[data-nav]");
-    if (nav) { location.hash = nav.dataset.nav; }
-  });
-
   function route() {
-    const h = location.hash || "#/";
-    const dayM = h.match(/^#\/client\/([^/]+)\/day\/([^/]+)$/);
-    const cliM = h.match(/^#\/client\/([^/]+)$/);
-    if (dayM) {
-      const cid = decodeURIComponent(dayM[1]);
-      currentDayCache = findDay(findClient(cid), decodeURIComponent(dayM[2]));
-      renderDay(cid, decodeURIComponent(dayM[2]));
-    } else if (cliM) {
-      currentDayCache = null;
-      renderClient(decodeURIComponent(cliM[1]));
-      topActions.innerHTML = globalActions();
-    } else {
-      currentDayCache = null;
-      renderClients();
-      topActions.innerHTML = globalActions();
-    }
+    restStop();
+    var h = location.hash || "#/";
+    var chartM = h.match(/^#\/client\/([^/]+)\/day\/([^/]+)\/chart\/(.+)$/);
+    var histM = h.match(/^#\/client\/([^/]+)\/day\/([^/]+)\/history$/);
+    var dayM = h.match(/^#\/client\/([^/]+)\/day\/([^/]+)$/);
+    var cliM = h.match(/^#\/client\/([^/]+)$/);
+    if (chartM) renderChart(decodeURIComponent(chartM[1]), decodeURIComponent(chartM[2]), chartM[3]);
+    else if (histM) renderHistory(decodeURIComponent(histM[1]), decodeURIComponent(histM[2]));
+    else if (dayM) renderDay(decodeURIComponent(dayM[1]), decodeURIComponent(dayM[2]));
+    else if (cliM) renderClient(decodeURIComponent(cliM[1]));
+    else renderClients();
   }
-
   window.addEventListener("hashchange", route);
 
-  // Устойчивый старт: дожидаемся готовности DOM и ловим сбой видимо.
   function boot() {
-    try { route(); }
-    catch (e) {
-      if (view) view.innerHTML = '<p class="hint" style="color:#d03b3b">Ошибка запуска: ' +
-        String(e && e.message || e) + '</p><p class="hint">Попробуйте открыть файл в Safari.</p>';
+    try {
+      // Закрепляем нормализованную (мигрированную) структуру в хранилище,
+      // чтобы новые поля появились сразу, а не только после первого действия.
+      try { rawSet(KEY, JSON.stringify(data)); rawSet(BACKUP, JSON.stringify(data)); } catch (e) {}
+      route();
+    } catch (e) {
+      if (view) view.innerHTML = '<p class="hint" style="color:#ff453a">Ошибка запуска: ' + String(e && e.message || e) + '</p>';
     }
   }
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot);
-  } else {
-    boot();
-  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+})();
 </script>
 </body>
 </html>

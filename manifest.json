@@ -1,12 +1,12 @@
 {
-  "name": "Трекер тренировок",
-  "short_name": "Трекер",
+  "name": "ИЧ · Трекер тренировок",
+  "short_name": "ИЧ Трекер",
   "start_url": "index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0d0d0d",
-  "theme_color": "#0d0d0d",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
   "lang": "ru",
   "icons": [
     { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
