@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Трекер">
+<meta name="theme-color" content="#0d0d0d">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<title>Трекер тренировок — Зал</title>
+<script>
+  // Регистрируем service worker — он кэширует приложение,
+  // чтобы оно работало без интернета после первой загрузки.
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function () {});
+    });
+  }
+</script>
+<style>
+  :root {
+    --surface-1:      #fcfcfb;
+    --surface-2:      #f2f2ef;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --border:         rgba(11,11,11,0.12);
+    --accent:         #2a78d6;
+    --accent-soft:    rgba(42,120,214,0.12);
+    --good:           #0ca30c;
+    --warm:           #e08a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface-1:      #1a1a19;
+      --surface-2:      #242422;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --border:         rgba(255,255,255,0.14);
+      --accent:         #3987e5;
+      --accent-soft:    rgba(57,135,229,0.18);
+      --good:           #16c916;
+      --warm:           #f5a623;
+    }
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    background: var(--page-plane);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.45;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .app { max-width: 720px; margin: 0 auto; padding: 0 14px 80px; }
+
+  header.top {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--page-plane);
+    padding: 16px 0 12px;
+    border-bottom: 1px solid var(--gridline);
+    margin-bottom: 16px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  header.top h1 { font-size: 18px; margin: 0; flex: 1; }
+  .btn {
+    font: inherit; font-size: 14px;
+    padding: 8px 14px; border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface-1); color: var(--text-primary);
+    cursor: pointer;
+  }
+  .btn:active { background: var(--surface-2); }
+  .btn-accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-ghost { background: none; border: none; color: var(--text-secondary); padding: 8px 6px; }
+  .btn-ghost:active { color: var(--accent); }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .crumbs { color: var(--text-muted); font-size: 13px; margin: 0 0 14px; }
+  .crumbs b { color: var(--text-secondary); font-weight: 600; }
+
+  /* Списки-плитки */
+  .tile-list { display: flex; flex-direction: column; gap: 10px; }
+  .tile {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer;
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px;
+  }
+  .tile:active { border-color: var(--accent); }
+  .tile-title { font-weight: 600; font-size: 17px; }
+  .tile-sub { color: var(--text-muted); font-size: 13px; margin-top: 2px; }
+  .tile-chevron { color: var(--text-muted); font-size: 20px; }
+  .tile-progress { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+
+  /* Упражнение-карточка */
+  .exercise {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 14px; padding: 12px 14px; margin-bottom: 12px;
+  }
+  .exercise.done { border-color: var(--good); }
+  .ex-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .ex-check {
+    flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px;
+    border: 2px solid var(--border); background: var(--surface-2);
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 16px; color: transparent; padding: 0;
+  }
+  .ex-check.on { background: var(--good); border-color: var(--good); color: #fff; }
+  .ex-name {
+    flex: 1; font: inherit; font-weight: 600; font-size: 16px;
+    border: none; background: none; color: var(--text-primary);
+    padding: 4px 2px; border-bottom: 1px dashed transparent; min-width: 0;
+  }
+  .ex-name:focus { outline: none; border-bottom-color: var(--accent); }
+  .ex-del { flex: 0 0 auto; color: var(--text-muted); border: none; background: none; cursor: pointer; font-size: 18px; padding: 4px 6px; }
+  .ex-del:active { color: var(--warm); }
+
+  /* Таблица подходов */
+  .sets { width: 100%; border-collapse: collapse; }
+  .sets th {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .03em;
+    color: var(--text-muted); font-weight: 600; text-align: center; padding: 2px 4px 6px;
+  }
+  .sets th.lbl { text-align: left; }
+  .sets td { padding: 4px 3px; text-align: center; vertical-align: middle; }
+  .set-label { text-align: left; color: var(--text-secondary); font-size: 13px; white-space: nowrap; }
+  .set-label .warm-tag { color: var(--warm); font-weight: 600; }
+  .set-check {
+    width: 24px; height: 24px; border-radius: 7px;
+    border: 2px solid var(--border); background: var(--surface-2);
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 14px; color: transparent; padding: 0;
+  }
+  .set-check.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .num {
+    width: 46px; font: inherit; font-size: 15px; text-align: center;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface-2); color: var(--text-primary);
+    padding: 6px 2px; font-variant-numeric: tabular-nums;
+  }
+  .num:focus { outline: none; border-color: var(--accent); background: var(--surface-1); }
+  .mult { color: var(--text-muted); font-size: 13px; }
+  .name-cell { display: flex; align-items: center; }
+  .person-col { border-left: 1px solid var(--gridline); }
+  .person-head { color: var(--accent); }
+
+  .add-set { margin-top: 8px; }
+  .set-del { color: var(--text-muted); border: none; background: none; cursor: pointer; font-size: 15px; padding: 2px 4px; }
+
+  .foot-actions { margin-top: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .hint { color: var(--text-muted); font-size: 13px; margin: 10px 2px 0; }
+  .saved-flash {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    background: var(--text-primary); color: var(--page-plane);
+    padding: 8px 16px; border-radius: 999px; font-size: 13px;
+    opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 50;
+  }
+  .saved-flash.show { opacity: .92; }
+
+  @media (max-width: 420px) {
+    .num { width: 40px; }
+    body { font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <button class="btn-ghost" id="back-btn" style="display:none">← Назад</button>
+    <h1 id="title">Трекер тренировок</h1>
+    <div class="btn-row" id="top-actions"></div>
+  </header>
+
+  <p class="crumbs" id="crumbs"></p>
+  <div id="view"></div>
+</div>
+
+<div class="saved-flash" id="flash">Сохранено</div>
+
+<script>
+/* Видимый перехват ошибок: если что-то падает (особенно во встроенных
+   WebView — Telegram, Happ и т.п.), показываем текст ошибки на экране,
+   а не белый лист. */
+window.onerror = function (msg, src, line, col) {
+  try {
+    var v = document.getElementById("view");
+    if (v) v.innerHTML = '<p class="hint" style="color:#d03b3b">Ошибка: ' +
+      String(msg) + ' (стр. ' + line + ')</p>' +
+      '<p class="hint">Откройте файл в Safari — встроенные браузеры приложений часто урезаны.</p>';
+  } catch (e) {}
+  return false;
+};
+
+/* =========================================================================
+   ТРЕКЕР ТРЕНИРОВОК — самостоятельное приложение.
+   - Данные хранятся в localStorage браузера (ключ TRACKER_KEY), автосохранение.
+   - Кнопка «Экспорт» скачивает JSON-файл, «Импорт» — загружает его обратно.
+   - Стартовые данные (SEED) — программа Анвара и Данила из плана в CRM.
+   - Всё редактируется: галочки, названия, вес и повторы (отдельно для Анвара
+     и Данила), добавление/удаление подходов и упражнений.
+   ========================================================================= */
+
+  const TRACKER_KEY = "gym_tracker_v1";
+
+  // Стартовые данные. Каждый подход хранит вес/повторы отдельно по людям пары.
+  // Загружаются только если в localStorage ещё пусто.
+  const SEED = {
+    клиенты: [
+      {
+        id: "anvar-danil",
+        имя: "Анвар и Данил",
+        люди: ["Анвар", "Данил"],
+        дни: [
+          {
+            id: "day1",
+            название: "День 1 — Full Body",
+            упражнения: [
+              ex("Приседания со штангой", [
+                set(false, {Анвар:[30,12], Данил:[30,12]}),
+                set(false, {Анвар:[30,12], Данил:[30,12]}),
+                set(false, {Анвар:[30,12], Данил:[30,12]}),
+              ]),
+              ex("Жим штанги лёжа", [
+                set(false, {Анвар:[40,6], Данил:[40,10]}),
+                set(false, {Анвар:[40,6], Данил:[40,10]}),
+                set(false, {Анвар:[40,6], Данил:[40,10]}),
+              ]),
+              ex("Тяга верхнего блока", [
+                set(false, {Анвар:[30,12], Данил:[30,12]}),
+                set(false, {Анвар:[30,12], Данил:[30,12]}),
+                set(false, {Анвар:[30,12], Данил:[30,12]}),
+              ]),
+              ex("Бицепс «молотки»", [
+                set(false, {Анвар:[8,8], Данил:[10,10]}),
+                set(false, {Анвар:[8,8], Данил:[10,10]}),
+                set(false, {Анвар:[8,8], Данил:[10,10]}),
+              ]),
+              ex("Махи в стороны", [
+                set(false, {Анвар:[6,15], Данил:[6,15]}),
+                set(false, {Анвар:[6,15], Данил:[6,15]}),
+                set(false, {Анвар:[6,15], Данил:[6,15]}),
+              ]),
+            ],
+          },
+          {
+            id: "day2",
+            название: "День 2 — Full Body",
+            упражнения: [
+              ex("Разгибание голени в тренажёре сидя", defSets()),
+              ex("Сгибание голени в тренажёре лёжа", defSets()),
+              ex("Жим гантелей на наклонной скамье", defSets()),
+              ex("Горизонтальная тяга в рычажном тренажёре (хаммер)", defSets()),
+              ex("Трицепс на блоке с прямой рукояткой", defSets()),
+            ],
+          },
+          {
+            id: "day3",
+            название: "День 3 — Full Body",
+            упражнения: [
+              ex("Жим ногами в платформе", defSets()),
+              ex("Жим в грудном рычажном тренажёре (хаммер)", defSets()),
+              ex("Тяга верхнего блока узким обратным хватом", defSets()),
+              ex("Горизонтальная тяга в блоке", defSets()),
+              ex("Подъём штанги на бицепс", defSets()),
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  function ex(название, подходы) {
+    return { id: uid(), название, сделано: false, подходы };
+  }
+  function set(разминка, веса) {
+    // веса: { Имя: [вес, повторы] }
+    const данные = {};
+    for (const person in веса) данные[person] = { вес: веса[person][0], повт: веса[person][1] };
+    return { id: uid(), разминка, отмечен: false, данные };
+  }
+  function defSets() {
+    // 3 рабочих подхода с пустыми весами (заполняются на тренировке)
+    const blank = { Анвар: [null, null], Данил: [null, null] };
+    return [ set(false, blank), set(false, blank), set(false, blank) ];
+  }
+  function uid() { return "x" + Math.random().toString(36).slice(2, 9); }
+
+  // ---- Хранилище (устойчивое, для офлайн-файла на телефоне) ----
+  // Пишем в два ключа localStorage + дублируем во второе хранилище, чтобы
+  // пережить возможный сброс Safari у file://. Читаем из первого живого.
+  const BACKUP_KEY = TRACKER_KEY + "_backup";
+  let memStore = {};
+
+  function rawSet(key, val) {
+    try { localStorage.setItem(key, val); } catch (e) {}
+    memStore[key] = val;
+  }
+  function rawGet(key) {
+    try {
+      const v = localStorage.getItem(key);
+      if (v != null) return v;
+    } catch (e) {}
+    return memStore[key] != null ? memStore[key] : null;
+  }
+
+  function load() {
+    const raw = rawGet(TRACKER_KEY) || rawGet(BACKUP_KEY);
+    if (raw) {
+      try { return JSON.parse(raw); } catch (e) {}
+    }
+    return JSON.parse(JSON.stringify(SEED));
+  }
+  let data = load();
+
+  let saveTimer = null;
+  function save() {
+    const json = JSON.stringify(data);
+    rawSet(TRACKER_KEY, json);
+    rawSet(BACKUP_KEY, json);
+    clearTimeout(saveTimer);
+    if (flash) {
+      flash.classList.add("show");
+      saveTimer = setTimeout(() => flash.classList.remove("show"), 900);
+    }
+  }
+
+  // Подстраховка: при сворачивании/закрытии вкладки принудительно сохраняем.
+  window.addEventListener("pagehide", () => { try { save(); } catch (e) {} });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") { try { save(); } catch (e) {} }
+  });
+
+  // ---- Роутинг по хешу: #/ , #/client/ID , #/client/ID/day/DAYID ----
+  const view = document.getElementById("view");
+  const titleEl = document.getElementById("title");
+  const crumbsEl = document.getElementById("crumbs");
+  const backBtn = document.getElementById("back-btn");
+  const topActions = document.getElementById("top-actions");
+  const flash = document.getElementById("flash");
+
+  function findClient(cid) { return data.клиенты.find(c => c.id === cid); }
+  function findDay(client, did) { return client && client.дни.find(d => d.id === did); }
+
+  function esc(s) {
+    return String(s ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+  }
+
+  function dayProgress(day) {
+    const total = day.упражнения.length;
+    const done = day.упражнения.filter(e => e.сделано).length;
+    return { done, total };
+  }
+
+  // ---------- Экран: список клиентов ----------
+  function renderClients() {
+    titleEl.textContent = "Клиенты";
+    backBtn.style.display = "none";
+    crumbsEl.innerHTML = "";
+    topActions.innerHTML = "";
+    if (data.клиенты.length === 0) {
+      view.innerHTML = '<p class="hint">Пока нет клиентов.</p>';
+      return;
+    }
+    view.innerHTML = '<div class="tile-list">' + data.клиенты.map(c => `
+      <button class="tile" data-nav="#/client/${esc(c.id)}">
+        <span>
+          <span class="tile-title">${esc(c.имя)}</span>
+          <span class="tile-sub">${c.дни.length} дн. программы</span>
+        </span>
+        <span class="tile-chevron">›</span>
+      </button>`).join("") + '</div>';
+  }
+
+  // ---------- Экран: дни клиента ----------
+  function renderClient(cid) {
+    const client = findClient(cid);
+    if (!client) { location.hash = "#/"; return; }
+    titleEl.textContent = client.имя;
+    backBtn.style.display = "";
+    backBtn.dataset.nav = "#/";
+    crumbsEl.innerHTML = `<b>${esc(client.имя)}</b>`;
+    topActions.innerHTML = "";
+    view.innerHTML = '<div class="tile-list">' + client.дни.map(d => {
+      const p = dayProgress(d);
+      return `
+      <button class="tile" data-nav="#/client/${esc(client.id)}/day/${esc(d.id)}">
+        <span>
+          <span class="tile-title">${esc(d.название)}</span>
+          <span class="tile-sub">${d.упражнения.length} упражнений</span>
+        </span>
+        <span class="tile-progress">${p.done}/${p.total} ✓</span>
+      </button>`;
+    }).join("") + '</div>';
+  }
+
+  // ---------- Экран: тренировка (день) ----------
+  function renderDay(cid, did) {
+    const client = findClient(cid);
+    const day = findDay(client, did);
+    if (!day) { location.hash = "#/client/" + cid; return; }
+    titleEl.textContent = day.название;
+    backBtn.style.display = "";
+    backBtn.dataset.nav = "#/client/" + cid;
+    crumbsEl.innerHTML = `<b>${esc(client.имя)}</b> › ${esc(day.название)}`;
+    topActions.innerHTML = `<button class="btn" data-act="export">Экспорт</button>`;
+
+    const people = client.люди;
+    view.innerHTML = day.упражнения.map((e, ei) => renderExercise(e, ei, people)).join("")
+      + `<div class="foot-actions">
+           <button class="btn" data-act="add-ex">+ упражнение</button>
+           <button class="btn btn-ghost" data-act="reset-checks">Снять все галочки</button>
+         </div>
+         <p class="hint">Всё редактируется: коснитесь названия, веса или повторов. Галочка ✓ — подход/упражнение сделано. Данные сохраняются автоматически.</p>`;
+  }
+
+  function renderExercise(e, ei, people) {
+    const headCols = people.map(p => `<th colspan="2" class="person-col person-head">${esc(p)}</th>`).join("");
+    const subCols = people.map(() => `<th class="person-col">кг</th><th>раз</th>`).join("");
+    const rows = e.подходы.map((s, si) => renderSetRow(s, si, ei, people)).join("");
+    return `
+      <div class="exercise ${e.сделано ? "done" : ""}" data-ex="${ei}">
+        <div class="ex-head">
+          <button class="ex-check ${e.сделано ? "on" : ""}" data-act="toggle-ex" data-ex="${ei}" title="Упражнение сделано">✓</button>
+          <input class="ex-name" data-act="rename-ex" data-ex="${ei}" value="${esc(e.название)}" />
+          <button class="ex-del" data-act="del-ex" data-ex="${ei}" title="Удалить упражнение">✕</button>
+        </div>
+        <table class="sets">
+          <thead>
+            <tr><th class="lbl"></th><th></th>${headCols}</tr>
+            <tr><th class="lbl">подход</th><th>✓</th>${subCols}</tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <div class="add-set btn-row">
+          <button class="btn" data-act="add-set" data-ex="${ei}">+ подход</button>
+          <button class="btn btn-ghost" data-act="add-warm" data-ex="${ei}">+ разминка</button>
+        </div>
+      </div>`;
+  }
+
+  function renderSetRow(s, si, ei, people) {
+    const label = s.разминка
+      ? `<span class="warm-tag">разм.</span>`
+      : `раб. ${workIndex(ei, si)}`;
+    const cells = people.map(p => {
+      const d = s.данные[p] || { вес: null, повт: null };
+      return `
+        <td class="person-col"><input class="num" inputmode="decimal" data-act="edit-weight" data-ex="${ei}" data-set="${si}" data-person="${esc(p)}" value="${d.вес ?? ""}" placeholder="–"></td>
+        <td><input class="num" inputmode="numeric" data-act="edit-reps" data-ex="${ei}" data-set="${si}" data-person="${esc(p)}" value="${d.повт ?? ""}" placeholder="–"></td>`;
+    }).join("");
+    return `
+      <tr>
+        <td class="set-label">${label}</td>
+        <td><button class="set-check ${s.отмечен ? "on" : ""}" data-act="toggle-set" data-ex="${ei}" data-set="${si}">✓</button></td>
+        ${cells}
+        <td><button class="set-del" data-act="del-set" data-ex="${ei}" data-set="${si}" title="Удалить подход">✕</button></td>
+      </tr>`;
+  }
+
+  // Номер рабочего подхода (без учёта разминочных) — для подписи «раб. N»
+  let currentDayCache = null;
+  function workIndex(ei, si) {
+    const day = currentDayCache;
+    if (!day) return si + 1;
+    const sets = day.упражнения[ei].подходы;
+    let n = 0;
+    for (let i = 0; i <= si; i++) if (!sets[i].разминка) n++;
+    return n;
+  }
+
+  // ---- Действия на экране дня ----
+  function currentDayFromHash() {
+    const m = location.hash.match(/^#\/client\/([^/]+)\/day\/([^/]+)$/);
+    if (!m) return null;
+    const client = findClient(decodeURIComponent(m[1]));
+    return findDay(client, decodeURIComponent(m[2]));
+  }
+
+  view.addEventListener("click", (evt) => {
+    const btn = evt.target.closest("[data-act]");
+    if (!btn) return;
+    const act = btn.dataset.act;
+    const day = currentDayFromHash();
+
+    if (act === "export") { doExport(); return; }
+
+    if (!day) return;
+    const ei = btn.dataset.ex != null ? +btn.dataset.ex : null;
+    const si = btn.dataset.set != null ? +btn.dataset.set : null;
+
+    if (act === "toggle-ex") {
+      day.упражнения[ei].сделано = !day.упражнения[ei].сделано;
+      save(); route(); return;
+    }
+    if (act === "del-ex") {
+      if (confirm("Удалить упражнение «" + day.упражнения[ei].название + "»?")) {
+        day.упражнения.splice(ei, 1); save(); route();
+      }
+      return;
+    }
+    if (act === "add-ex") {
+      const client = findClientOfDay(day);
+      const blank = {}; client.люди.forEach(p => blank[p] = [null, null]);
+      day.упражнения.push(ex("Новое упражнение", [ set(false, blank), set(false, blank), set(false, blank) ]));
+      save(); route(); return;
+    }
+    if (act === "toggle-set") {
+      day.упражнения[ei].подходы[si].отмечен = !day.упражнения[ei].подходы[si].отмечен;
+      save(); route(); return;
+    }
+    if (act === "add-set" || act === "add-warm") {
+      const client = findClientOfDay(day);
+      const blank = {}; client.люди.forEach(p => blank[p] = [null, null]);
+      day.упражнения[ei].подходы.push(set(act === "add-warm", blank));
+      save(); route(); return;
+    }
+    if (act === "del-set") {
+      day.упражнения[ei].подходы.splice(si, 1); save(); route(); return;
+    }
+    if (act === "reset-checks") {
+      day.упражнения.forEach(e => { e.сделано = false; e.подходы.forEach(s => s.отмечен = false); });
+      save(); route(); return;
+    }
+  });
+
+  // Правки текстовых полей (название/вес/повторы) — на input, без перерисовки
+  view.addEventListener("input", (evt) => {
+    const el = evt.target.closest("[data-act]");
+    if (!el) return;
+    const act = el.dataset.act;
+    const day = currentDayFromHash();
+    if (!day) return;
+    const ei = +el.dataset.ex;
+
+    if (act === "rename-ex") {
+      day.упражнения[ei].название = el.value;
+      save(); return;
+    }
+    const si = +el.dataset.set;
+    const person = el.dataset.person;
+    const s = day.упражнения[ei].подходы[si];
+    if (!s.данные[person]) s.данные[person] = { вес: null, повт: null };
+    const val = el.value.trim();
+    const num = val === "" ? null : Number(val.replace(",", "."));
+    if (act === "edit-weight") s.данные[person].вес = (val === "" || isNaN(num)) ? null : num;
+    if (act === "edit-reps")   s.данные[person].повт = (val === "" || isNaN(num)) ? null : num;
+    save();
+  });
+
+  function findClientOfDay(day) {
+    return data.клиенты.find(c => c.дни.some(d => d.id === day.id));
+  }
+
+  // ---- Экспорт / Импорт ----
+  function doExport() {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.href = url; a.download = "тренировки_" + stamp + ".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+  function doImport() {
+    const inp = document.createElement("input");
+    inp.type = "file"; inp.accept = "application/json,.json";
+    inp.onchange = () => {
+      const file = inp.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const parsed = JSON.parse(reader.result);
+          if (!parsed || !Array.isArray(parsed.клиенты)) throw new Error("нет поля клиенты");
+          data = parsed; save(); route();
+          alert("Данные загружены.");
+        } catch (e) { alert("Не удалось прочитать файл: " + e.message); }
+      };
+      reader.readAsText(file);
+    };
+    inp.click();
+  }
+
+  // ---- Кнопки в шапке на экране клиентов (экспорт/импорт всегда доступны) ----
+  function globalActions() {
+    return `<button class="btn" data-gact="export">Экспорт</button>
+            <button class="btn btn-ghost" data-gact="import">Импорт</button>`;
+  }
+  document.getElementById("top-actions").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-gact], [data-act]");
+    if (!b) return;
+    const a = b.dataset.gact || b.dataset.act;
+    if (a === "export") doExport();
+    if (a === "import") doImport();
+  });
+
+  // ---- Роутер ----
+  backBtn.addEventListener("click", () => { if (backBtn.dataset.nav) location.hash = backBtn.dataset.nav; });
+  document.body.addEventListener("click", (e) => {
+    const nav = e.target.closest("[data-nav]");
+    if (nav) { location.hash = nav.dataset.nav; }
+  });
+
+  function route() {
+    const h = location.hash || "#/";
+    const dayM = h.match(/^#\/client\/([^/]+)\/day\/([^/]+)$/);
+    const cliM = h.match(/^#\/client\/([^/]+)$/);
+    if (dayM) {
+      const cid = decodeURIComponent(dayM[1]);
+      currentDayCache = findDay(findClient(cid), decodeURIComponent(dayM[2]));
+      renderDay(cid, decodeURIComponent(dayM[2]));
+    } else if (cliM) {
+      currentDayCache = null;
+      renderClient(decodeURIComponent(cliM[1]));
+      topActions.innerHTML = globalActions();
+    } else {
+      currentDayCache = null;
+      renderClients();
+      topActions.innerHTML = globalActions();
+    }
+  }
+
+  window.addEventListener("hashchange", route);
+
+  // Устойчивый старт: дожидаемся готовности DOM и ловим сбой видимо.
+  function boot() {
+    try { route(); }
+    catch (e) {
+      if (view) view.innerHTML = '<p class="hint" style="color:#d03b3b">Ошибка запуска: ' +
+        String(e && e.message || e) + '</p><p class="hint">Попробуйте открыть файл в Safari.</p>';
+    }
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+</script>
+</body>
+</html>

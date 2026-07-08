@@ -1,0 +1,14 @@
+{
+  "name": "Трекер тренировок",
+  "short_name": "Трекер",
+  "start_url": "index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d0d0d",
+  "theme_color": "#0d0d0d",
+  "lang": "ru",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
