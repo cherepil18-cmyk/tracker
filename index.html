@@ -263,6 +263,20 @@
   }
   .saved-flash.show { opacity: .95; }
 
+  /* Оверлей вставки данных */
+  .overlay {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(0,0,0,.7); backdrop-filter: blur(3px);
+    display: flex; align-items: center; justify-content: center; padding: 18px;
+  }
+  .overlay-card {
+    width: 100%; max-width: 460px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 18px; padding: 20px;
+  }
+  .overlay-title { font-size: 20px; font-weight: 800; letter-spacing: -.01em; margin-bottom: 8px; }
+  .overlay-sub { color: var(--text-2); font-size: 14px; margin: 0 0 14px; }
+  .overlay-btns { display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px; }
+
   @media (max-width: 420px) { .num { width: 42px; } body { font-size: 15px; } }
   @media (prefers-reduced-motion: reduce) { .saved-flash { transition: none; } }
 </style>
@@ -1320,6 +1334,8 @@
       data.клиенты.length ? (data.клиенты.length + " активных · выбери, чтобы открыть") : "");
     toolbarEl.innerHTML =
       '<button class="btn btn-primary" data-act="add-client">+ Клиент</button>' +
+      '<button class="btn btn-ghost" data-act="paste-data">Вставить данные</button>' +
+      '<button class="btn btn-ghost" data-act="copy-data">Копировать</button>' +
       '<button class="btn btn-ghost" data-act="export">Экспорт</button>' +
       '<button class="btn btn-ghost" data-act="import">Импорт</button>';
     if (!data.клиенты.length) {
@@ -1790,6 +1806,8 @@
 
     if (act === "export") { doExport(); return; }
     if (act === "import") { doImport(); return; }
+    if (act === "copy-data") { copyData(); return; }
+    if (act === "paste-data") { pasteData(); return; }
     if (act === "add-client") { addClient(); return; }
     if (act === "del-client") {
       if (client && confirm("Удалить клиента «" + client.имя + "» со всеми данными?")) {
@@ -1892,6 +1910,89 @@
       r.readAsText(f);
     };
     inp.click();
+  }
+
+  // ---- Обмен данными текстом (без GitHub) ----
+  function toast(msg) {
+    if (!flash) return;
+    flash.textContent = msg;
+    flash.classList.add("show");
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () { flash.classList.remove("show"); flash.textContent = "Сохранено"; }, 1600);
+  }
+
+  function copyData() {
+    var text = JSON.stringify(data);
+    function fallback() { window.prompt("Скопируй эти данные и пришли мне (долгий тап → выделить всё → копировать):", text); }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { toast("Данные скопированы"); }, fallback);
+      } else { fallback(); }
+    } catch (e) { fallback(); }
+  }
+
+  function pasteData() {
+    var overlay = document.createElement("div");
+    overlay.className = "overlay";
+    overlay.innerHTML =
+      '<div class="overlay-card">' +
+        '<div class="overlay-title">Вставить данные</div>' +
+        '<p class="overlay-sub">Вставь сюда текст, который я тебе прислал в чате, и нажми «Применить». Данные добавятся к твоим (существующий клиент можно обновить).</p>' +
+        '<textarea class="note-area" id="paste-area" placeholder="Вставь текст данных сюда…" style="min-height:120px"></textarea>' +
+        '<div class="overlay-btns">' +
+          '<button class="btn btn-ghost" id="paste-cancel">Отмена</button>' +
+          '<button class="btn btn-primary" id="paste-apply">Применить</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    var ta = overlay.querySelector("#paste-area");
+    ta.focus();
+    overlay.querySelector("#paste-cancel").addEventListener("click", function () { overlay.remove(); });
+    overlay.addEventListener("click", function (e) { if (e.target === overlay) overlay.remove(); });
+    overlay.querySelector("#paste-apply").addEventListener("click", function () {
+      var raw = ta.value.trim();
+      if (!raw) { overlay.remove(); return; }
+      var parsed;
+      try { parsed = JSON.parse(raw); }
+      catch (e) { alert("Не получилось прочитать данные. Убедись, что вставил текст целиком, без лишних символов."); return; }
+      // нормализуем к списку клиентов
+      var incoming;
+      if (parsed && Array.isArray(parsed.клиенты)) incoming = parsed.клиенты;
+      else if (Array.isArray(parsed)) incoming = parsed;
+      else if (parsed && parsed.id && parsed.имя) incoming = [parsed];
+      else { alert("В данных не найдено клиентов."); return; }
+      // достраиваем поля через migrate (обернув в объект)
+      incoming = migrate({ клиенты: JSON.parse(JSON.stringify(incoming)) }).клиенты;
+      overlay.remove();
+      mergeClients(incoming);
+    });
+  }
+
+  function mergeClients(incoming) {
+    var added = 0, updated = 0;
+    function norm(s) { return String(s || "").trim().toLowerCase(); }
+    incoming.forEach(function (nc) {
+      var byId = nc.id ? data.клиенты.find(function (c) { return c.id === nc.id; }) : null;
+      var byName = byId ? null : data.клиенты.find(function (c) { return norm(c.имя) === norm(nc.имя); });
+      var match = byId || byName;
+      if (!match) {
+        // новый: гарантируем уникальный id
+        if (!nc.id || data.клиенты.some(function (c) { return c.id === nc.id; })) nc.id = uid();
+        data.клиенты.push(nc); added++;
+        return;
+      }
+      var upd = confirm("Клиент «" + match.имя + "» уже есть.\nОК — обновить его данными из вставки.\nОтмена — добавить как нового.");
+      if (upd) {
+        nc.id = match.id; // сохраняем исходный id
+        var idx = data.клиенты.indexOf(match);
+        data.клиенты[idx] = nc; updated++;
+      } else {
+        nc.id = uid();
+        data.клиенты.push(nc); added++;
+      }
+    });
+    save(); route();
+    toast("Готово: добавлено " + added + ", обновлено " + updated);
   }
 
   // ---- Роутер ----
