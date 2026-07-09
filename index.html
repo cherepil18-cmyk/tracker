@@ -200,6 +200,28 @@
   .rest-btns { display: flex; gap: 8px; flex: 1; flex-wrap: wrap; }
 
   /* ---- История / прогресс ---- */
+  /* Сборщик «Своя тренировка» */
+  .build-group { margin-bottom: 18px; }
+  .build-day {
+    font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--amber); margin: 0 2px 8px;
+  }
+  .build-row {
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+    font: inherit; color: inherit; cursor: pointer; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 8px;
+  }
+  .build-row:active { border-color: var(--lime); }
+  .build-check {
+    flex: 0 0 auto; width: 28px; height: 28px; border-radius: 8px;
+    border: 2px solid var(--line); background: var(--surface-2);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 15px; color: transparent;
+  }
+  .build-check.on { background: var(--lime); border-color: var(--lime); color: #0a0a0a; }
+  .build-info { display: flex; flex-direction: column; min-width: 0; }
+  .build-name { font-weight: 700; font-size: 15px; }
+  .build-hint { color: var(--muted); font-size: 12px; margin-top: 2px; }
   .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
   .chip {
     font: inherit; font-size: 13px; font-weight: 600; padding: 8px 14px;
@@ -1329,6 +1351,7 @@
       (client.люди.length > 1 ? "пара" : "1 человек") + " · " + client.дни.length + " дн. программы");
     toolbarEl.innerHTML =
       '<button class="btn btn-primary" data-act="add-day">+ День</button>' +
+      '<button class="btn btn-ghost" data-nav="#/client/' + esc(cid) + '/build">+ Своя тренировка</button>' +
       '<button class="btn btn-ghost" data-act="export">Экспорт</button>' +
       '<button class="btn btn-ghost" data-act="del-client">Удалить клиента</button>';
 
@@ -1528,6 +1551,90 @@
     view.innerHTML = chipsHtml + itemsHtml;
   }
 
+  // ================= ЭКРАН: СБОРЩИК «СВОЯ ТРЕНИРОВКА» =================
+  // Выбор храним по ключу "dayId::exIndex".
+  var builderPick = {};
+
+  // Краткая подпись весов упражнения — последний рабочий подход, по каждому.
+  function exWeightHint(e, люди) {
+    var last = null;
+    for (var i = e.подходы.length - 1; i >= 0; i--) { if (!e.подходы[i].разминка) { last = e.подходы[i]; break; } }
+    if (!last) last = e.подходы[e.подходы.length - 1];
+    if (!last) return "";
+    var parts = люди.map(function (p) {
+      var d = last.данные[p];
+      if (!d || d.вес == null) return null;
+      return (люди.length > 1 ? p + " " : "") + d.вес + (d.повт != null ? "×" + d.повт : "") + " кг";
+    }).filter(Boolean);
+    return parts.join(" · ");
+  }
+
+  function renderBuilder(cid) {
+    var client = findClient(cid);
+    if (!client) { location.hash = "#/"; return; }
+    builderPick = {}; // новый заход — чистый выбор
+    setHeader('<button class="back" data-nav="#/client/' + esc(cid) + '">← ' + esc(client.имя) + '</button>',
+      'СВОЯ <span class="hl">ТРЕНИРОВКА</span>', "Отметь упражнения — соберём разовую тренировку");
+    toolbarEl.innerHTML = "";
+    drawBuilder(client);
+  }
+
+  function drawBuilder(client) {
+    var люди = client.люди;
+    if (!client.дни.length || !client.дни.some(function (d) { return d.упражнения.length; })) {
+      view.innerHTML = '<p class="empty">У клиента ещё нет упражнений в днях.<br>Сначала добавь упражнения в обычные дни программы.</p>';
+      return;
+    }
+    var body = client.дни.map(function (d) {
+      if (!d.упражнения.length) return "";
+      var rows = d.упражнения.map(function (e, ei) {
+        var key = d.id + "::" + ei;
+        var on = builderPick[key] ? "on" : "";
+        var hint = exWeightHint(e, люди);
+        return '<button class="build-row" data-act="build-toggle" data-key="' + esc(key) + '">' +
+          '<span class="build-check ' + on + '">✓</span>' +
+          '<span class="build-info"><span class="build-name">' + esc(e.название) + '</span>' +
+          (hint ? '<span class="build-hint">' + esc(hint) + '</span>' : '') + '</span></button>';
+      }).join("");
+      return '<div class="build-group"><div class="build-day">' + esc(d.название) + '</div>' + rows + '</div>';
+    }).join("");
+
+    var count = Object.keys(builderPick).filter(function (k) { return builderPick[k]; }).length;
+    var bar = '<div class="rest-bar" style="justify-content:space-between">' +
+      '<button class="btn btn-ghost" data-nav="#/client/' + esc(client.id) + '">Отмена</button>' +
+      '<button class="btn btn-primary" data-act="build-make"' + (count ? "" : " disabled style=\"opacity:.5\"") + '>Собрать тренировку (' + count + ')</button>' +
+      '</div>';
+
+    view.innerHTML = body + bar;
+  }
+
+  function buildCustomDay(client) {
+    var picks = Object.keys(builderPick).filter(function (k) { return builderPick[k]; });
+    if (!picks.length) return;
+    var упражнения = [];
+    picks.forEach(function (key) {
+      var parts = key.split("::"), d = findDay(client, parts[0]);
+      if (!d) return;
+      var src = d.упражнения[+parts[1]];
+      if (!src) return;
+      // глубокий клон с новыми id и сброшенными отметками, веса копируем как есть
+      var подходы = src.подходы.map(function (s) {
+        var данные = {};
+        for (var p in s.данные) данные[p] = { вес: s.данные[p].вес, повт: s.данные[p].повт };
+        return { id: uid(), разминка: !!s.разминка, отмечен: false, данные: данные };
+      });
+      упражнения.push({ id: uid(), название: src.название, сделано: false, подходы: подходы });
+    });
+    var d = new Date();
+    var months = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
+    var название = "Своя тренировка " + d.getDate() + " " + months[d.getMonth()];
+    var newDay = { id: uid(), название: название, заметка: "", история: [], упражнения: упражнения };
+    client.дни.push(newDay);
+    builderPick = {};
+    save();
+    location.hash = "#/client/" + client.id + "/day/" + newDay.id;
+  }
+
   // ================= ЭКРАН: ПРОГРЕСС УПРАЖНЕНИЯ =================
   function renderChart(cid, did, exId) {
     var client = findClient(cid);
@@ -1693,6 +1800,13 @@
     }
     if (act === "add-day") { if (client) addDay(client); return; }
     if (act === "edit-abon") { if (client) editAbon(client); return; }
+    if (act === "build-toggle") {
+      var key = btn.dataset.key;
+      builderPick[key] = !builderPick[key];
+      if (client) drawBuilder(client);
+      return;
+    }
+    if (act === "build-make") { if (client) buildCustomDay(client); return; }
 
     if (!day) return;
     var ei = btn.dataset.ex != null ? +btn.dataset.ex : null;
@@ -1785,11 +1899,13 @@
     restStop();
     var h = location.hash || "#/";
     var chartM = h.match(/^#\/client\/([^/]+)\/day\/([^/]+)\/chart\/(.+)$/);
+    var buildM = h.match(/^#\/client\/([^/]+)\/build$/);
     var histDayM = h.match(/^#\/client\/([^/]+)\/history\/([^/]+)$/);
     var histM = h.match(/^#\/client\/([^/]+)\/history$/);
     var dayM = h.match(/^#\/client\/([^/]+)\/day\/([^/]+)$/);
     var cliM = h.match(/^#\/client\/([^/]+)$/);
     if (chartM) renderChart(decodeURIComponent(chartM[1]), decodeURIComponent(chartM[2]), chartM[3]);
+    else if (buildM) renderBuilder(decodeURIComponent(buildM[1]));
     else if (histDayM) renderHistory(decodeURIComponent(histDayM[1]), decodeURIComponent(histDayM[2]));
     else if (histM) renderHistory(decodeURIComponent(histM[1]), "");
     else if (dayM) renderDay(decodeURIComponent(dayM[1]), decodeURIComponent(dayM[2]));
